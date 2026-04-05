@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>Spite – Durban Rules (Landscape + Smarter AI + Animation)</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0a211b;
+      color: #fff;
+      margin: 0;
+      padding: 10px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      touch-action: manipulation;
+    }
+    h1 {
+      font-size: 1.9rem;
+      margin: 8px 0 10px;
+      color: #ffcc00;
+      text-align: center;
+    }
+    #status {
+      font-size: 1.3rem;
+      margin: 12px 0 18px;
+      text-align: center;
+      min-height: 1.8em;
+      font-weight: bold;
+      line-height: 1.4;
+    }
+    .section {
+      width: 100%;
+      max-width: 1000px;
+      margin: 12px 0;
+    }
+    h3 {
+      margin: 6px 0 8px;
+      text-align: center;
+      font-size: 1.2rem;
+    }
+    .cards {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      justify-content: center;
+    }
+    .pile {
+      width: 92px;
+      height: 130px;
+      position: relative;
+      cursor: pointer;
+    }
+    .card {
+      width: 92px;
+      height: 130px;
+      border-radius: 12px;
+      border: 3px solid #666;
+      background: #fff;
+      color: #000;
+      font-size: 24px;
+      font-weight: bold;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      align-items: flex-start;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.6);
+      user-select: none;
+      transition: all 0.12s;
+      padding: 6px;
+      box-sizing: border-box;
+      text-align: left;
+    }
+    .card:active {
+      transform: scale(1.08);
+    }
+    .card.red {
+      color: #c00;
+    }
+    .card.black {
+      color: #111;
+    }
+    .card.back {
+      background: linear-gradient(135deg, #003366, #0066cc);
+      color: white;
+      font-size: 48px;
+      justify-content: center;
+      align-items: center;
+      padding: 0;
+    }
+    .card.empty {
+      background: #334;
+      color: #aaa;
+      font-size: 15px;
+      border-color: #555;
+      justify-content: center;
+      align-items: center;
+      padding: 0;
+    }
+    .highlight {
+      border-color: #ff0 !important;
+      box-shadow: 0 0 25px #ff0 !important;
+      transform: scale(1.08) !important;
+      background: #fffa !important;
+    }
+    .start-highlight .card.empty {
+      background: #0f0 !important;
+      color: black !important;
+      border-color: #0f0 !important;
+      box-shadow: 0 0 30px #0f0 !important;
+    }
+    button {
+      width: 100%;
+      max-width: 380px;
+      margin: 20px auto;
+      padding: 16px;
+      font-size: 1.3rem;
+      font-weight: bold;
+      border: none;
+      border-radius: 12px;
+      background: #ff6600;
+      color: white;
+    }
+
+    .player-row, .ai-row {
+      display: flex;
+      flex-wrap: nowrap;
+      justify-content: center;
+      gap: 40px;
+      align-items: flex-start;
+      width: 100%;
+      padding: 0 10px;
+      box-sizing: border-box;
+    }
+
+    .pile-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 120px;
+    }
+
+    .flying-card {
+      position: absolute;
+      width: 92px;
+      height: 130px;
+      border-radius: 12px;
+      border: 3px solid #666;
+      background: #fff;
+      color: #000;
+      font-size: 24px;
+      font-weight: bold;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      align-items: flex-start;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.6);
+      padding: 6px;
+      box-sizing: border-box;
+      text-align: left;
+      z-index: 1000;
+      pointer-events: none;
+      transition: all 0.65s cubic-bezier(0.25, 0.1, 0.25, 1);
+    }
+
+    @media (max-width: 900px) {
+      .player-row, .ai-row {
+        flex-direction: column;
+        gap: 30px;
+      }
+      .pile-group {
+        width: 100%;
+        align-items: center;
+      }
+      .cards {
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<h1>Spite – Durban Rules</h1>
+<div id="status">Ready...</div>
+
+<div class="ai-row">
+  <div class="pile-group">
+    <h3>Opponent Side Stacks</h3>
+    <div id="ai-sides" class="cards"></div>
+  </div>
+
+  <div class="pile-group">
+    <h3>Opponent Hand</h3>
+    <div id="ai-hand" class="cards"></div>
+  </div>
+
+  <div class="pile-group">
+    <h3>Opponent Payoff: <span id="ai-payoff">13</span> left</h3>
+    <div id="ai-payoff-pile" class="pile"></div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Center Piles (A→Q • Kings wild)</h3>
+  <div id="centers" class="cards"></div>
+</div>
+
+<div class="player-row">
+  <div class="pile-group">
+    <h3>Your Payoff: <span id="player-payoff">13</span> left (tap to play)</h3>
+    <div id="player-payoff-pile" class="pile"></div>
+  </div>
+
+  <div class="pile-group">
+    <h3>Your Hand (tap card → tap center or side stack)</h3>
+    <div id="player-hand" class="cards"></div>
+  </div>
+
+  <div class="pile-group">
+    <h3>Your Side Stacks (tap hand card then tap any heap – ends turn)</h3>
+    <div id="player-sides" class="cards"></div>
+  </div>
+</div>
+
+<button id="new-game">New Game</button>
+
+<script>
+  var RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  var SUITS = ['♥','♦','♣','♠'];
+  var VALUE = {A:1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,J:11,Q:12,K:13};
+
+  function createDeck() {
+    var deck = [];
+    for (var i = 0; i < 2; i++) for (var s = 0; s < SUITS.length; s++) for (var r = 0; r < RANKS.length; r++) {
+      var suit = SUITS[s], rank = RANKS[r];
+      deck.push({rank:rank, suit:suit, color:(suit==='♥'||suit==='♦')?'red':'black'});
+    }
+    return deck;
+  }
+
+  function shuffle(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var temp = arr[i]; arr[i] = arr[j]; arr[j] = temp;
+    }
+    return arr;
+  }
+
+  function topCard(pile) { return pile.length > 0 ? pile[pile.length-1] : null; }
+  function canStartCenter(c) { return c && (c.rank === 'A' || c.rank === 'K'); }
+
+  function canPlayOn(played, top) {
+    if (!top) return canStartCenter(played);
+    if (played.rank === 'K' || top.rank === 'K') return true;
+    return (VALUE[played.rank]||0) === (VALUE[top.rank]||0) + 1;
+  }
+
+  function getIntendedRank(played, top) {
+    if (played.rank !== 'K') return played.rank;
+    if (!top) return 'A';
+    var nextVal = VALUE[top.rank] + 1;
+    if (nextVal > 12) return 'Q';
+    return RANKS[nextVal - 1];
+  }
+
+  function cardDisplay(c) { return c ? c.rank + c.suit : ''; }
+
+  var stock, playerPayoff = [], aiPayoff = [], playerHand = [], playerSides = [[],[],[],[]], aiHand = [], aiSides = [[],[],[],[]], centers = [[],[],[],[]], currentPlayer = "player", selected = null;
+  var hasPlayedThisTurn = false;
+  var hasDiscardedThisTurn = false;
+
+  var statusEl = document.getElementById("status");
+  var newBtn = document.getElementById("new-game");
+
+  function setStatus(msg, color) {
+    statusEl.textContent = msg;
+    if (color) statusEl.style.color = color;
+  }
+
+  function updateUI() {
+    document.getElementById("player-payoff").textContent = playerPayoff.length;
+    document.getElementById("ai-payoff").textContent = aiPayoff.length;
+
+    var playerPayoffDiv = document.getElementById("player-payoff-pile");
+    playerPayoffDiv.innerHTML = '';
+    var pp = topCard(playerPayoff);
+    var ppCard = document.createElement("div");
+    ppCard.className = pp ? "card " + pp.color : "card empty";
+    ppCard.textContent = pp ? cardDisplay(pp) : "WIN!";
+    if (pp) {
+      ppCard.onclick = function() { selectCard("payoff"); };
+      if (selected === "payoff") ppCard.classList.add("highlight");
+    }
+    playerPayoffDiv.appendChild(ppCard);
+
+    var aiPayoffDiv = document.getElementById("ai-payoff-pile");
+    aiPayoffDiv.innerHTML = '';
+    var ap = topCard(aiPayoff);
+    var apCard = document.createElement("div");
+    apCard.className = ap ? "card " + ap.color : "card empty";
+    apCard.textContent = ap ? cardDisplay(ap) : "DONE";
+    aiPayoffDiv.appendChild(apCard);
+
+    var centersDiv = document.getElementById("centers"); centersDiv.innerHTML = '';
+    var selCard = null;
+    if (selected) {
+      var parts = selected.split('-');
+      selCard = parts[0] === "hand" ? playerHand[parseInt(parts[1])] : 
+                parts[0] === "payoff" ? topCard(playerPayoff) : topCard(playerSides[parseInt(parts[1])]);
+    }
+    for (var i = 0; i < 4; i++) {
+      var t = topCard(centers[i]);
+      var pileEl = document.createElement("div"); pileEl.className = "pile";
+      var cardEl = document.createElement("div");
+      cardEl.className = t ? "card " + t.color : "card empty";
+      cardEl.textContent = t ? cardDisplay(t) : "A/K";
+      pileEl.appendChild(cardEl);
+      pileEl.onclick = (function(idx){ return function(){ tryPlayToCenter(idx); }; })(i);
+      if (selCard && canPlayOn(selCard, t)) {
+        if (!t) pileEl.classList.add("start-highlight");
+        else cardEl.classList.add("highlight");
+      }
+      centersDiv.appendChild(pileEl);
+    }
+
+    var handDiv = document.getElementById("player-hand"); handDiv.innerHTML = '';
+    for (var i = 0; i < playerHand.length; i++) {
+      var c = playerHand[i];
+      var cd = document.createElement("div");
+      cd.className = "card " + c.color;
+      cd.textContent = cardDisplay(c);
+      cd.onclick = (function(idx){ return function(){ selectCard("hand", idx); }; })(i);
+      if (selected === "hand-" + i) cd.classList.add("highlight");
+      handDiv.appendChild(cd);
+    }
+
+    var sidesDiv = document.getElementById("player-sides"); sidesDiv.innerHTML = '';
+    var canDiscard = selected && selected.startsWith("hand-") && !hasDiscardedThisTurn;
+    for (var i = 0; i < 4; i++) {
+      var pile = playerSides[i];
+      var p = document.createElement("div"); p.className = "pile";
+      var t = topCard(pile);
+      var inner = document.createElement("div");
+      if (t) {
+        inner.className = "card " + t.color;
+        inner.textContent = cardDisplay(t);
+        inner.onclick = (function(idx) {
+          return function(e) {
+            if (canDiscard) {
+              return;
+            }
+            e.stopPropagation();
+            selectCard("side", idx);
+          };
+        })(i);
+        p.appendChild(inner);
+      } else {
+        inner.className = "card empty";
+        inner.textContent = "-";
+        p.appendChild(inner);
+      }
+      if (canDiscard) {
+        p.classList.add("highlight");
+      }
+      p.onclick = (function(idx) {
+        return function() {
+          if (canDiscard) {
+            discardToSide(idx);
+          }
+        };
+      })(i);
+      sidesDiv.appendChild(p);
+    }
+
+    var aiSidesDiv = document.getElementById("ai-sides"); aiSidesDiv.innerHTML = '';
+    for (var i = 0; i < 4; i++) {
+      var pile = aiSides[i];
+      var p = document.createElement("div"); p.className = "pile";
+      var t = topCard(pile);
+      var inner = document.createElement("div");
+      if (t) {
+        inner.className = "card " + t.color;
+        inner.textContent = cardDisplay(t);
+        p.appendChild(inner);
+      } else {
+        inner.className = "card empty";
+        inner.textContent = "-";
+        p.appendChild(inner);
+      }
+      aiSidesDiv.appendChild(p);
+    }
+
+    var aiHandDiv = document.getElementById("ai-hand"); aiHandDiv.innerHTML = '';
+    for (var i = 0; i < 5; i++) {
+      var backCard = document.createElement("div");
+      backCard.className = "card back";
+      backCard.textContent = "🃏";
+      aiHandDiv.appendChild(backCard);
+    }
+  }
+
+  function selectCard(type, idx) {
+    if (currentPlayer !== "player") return;
+    if (selected === type + "-" + idx) { selected = null; updateUI(); setStatus("Selection cancelled"); return; }
+    selected = type + "-" + idx;
+    updateUI();
+    setStatus(type === "hand" ? "Tap center pile or any side stack to discard & end turn" :
+              type === "payoff" ? "Tap center pile to play payoff card" : "Tap center to play");
+  }
+
+  function discardToSide(sideIdx) {
+    if (currentPlayer !== "player" || !selected || !selected.startsWith("hand-") || hasDiscardedThisTurn) return;
+    var handIdx = parseInt(selected.split('-')[1]);
+    var card = playerHand[handIdx];
+    playerSides[sideIdx].push(card);
+    playerHand.splice(handIdx, 1);
+    hasDiscardedThisTurn = true;
+    selected = null;
+    updateUI();
+    setStatus("Discarded to side heap → turn ends");
+    endPlayerTurn();
+  }
+
+  function tryPlayToCenter(i) {
+    if (currentPlayer !== "player" || !selected) return;
+    var parts = selected.split('-');
+    var type = parts[0], idx = parseInt(parts[1]);
+    var card = type === "hand" ? playerHand[idx] : 
+               type === "payoff" ? topCard(playerPayoff) : topCard(playerSides[idx]);
+    if (!card || !canPlayOn(card, topCard(centers[i]))) {
+      setStatus("Cannot play there", "#ff6666");
+      return;
+    }
+    var intendedRank = getIntendedRank(card, topCard(centers[i]));
+    var cardCopy = { rank: intendedRank, suit: card.suit, color: card.color };
+
+    var sourceEl = null;
+    if (type === "hand") sourceEl = document.querySelectorAll("#player-hand .card")[idx];
+    else if (type === "payoff") sourceEl = document.getElementById("player-payoff-pile").querySelector(".card");
+    else if (type === "side") {
+      var sidePiles = document.querySelectorAll("#player-sides .pile");
+      sourceEl = sidePiles[idx].querySelector(".card");
+    }
+    var targetPileEl = document.querySelectorAll("#centers .pile")[i];
+
+    if (sourceEl && targetPileEl) {
+      animateCardPlay(sourceEl, cardCopy, targetPileEl);
+    }
+
+    if (type === "hand") playerHand.splice(idx,1);
+    else if (type === "payoff") playerPayoff.pop();
+    else playerSides[idx].pop();
+    centers[i].push(cardCopy);
+    if (intendedRank === 'Q') {
+      stock = stock.concat(centers[i]);
+      shuffle(stock);
+      centers[i] = [];
+    }
+    if (centers[i].length >= 13) { stock = stock.concat(centers[i]); shuffle(stock); centers[i] = []; }
+    hasPlayedThisTurn = true;
+    selected = null;
+
+    if (playerHand.length === 0 && !hasDiscardedThisTurn) {
+      while (playerHand.length < 5 && stock.length > 0) {
+        playerHand.push(stock.shift());
+      }
+    }
+
+    updateUI();
+    setStatus("Played " + cardDisplay(cardCopy));
+
+    if (playerPayoff.length === 0) {
+      setStatus("YOU WIN! 🎉", "#00ff00");
+      return;
+    }
+  }
+
+  function animateCardPlay(sourceEl, card, targetPileEl) {
+    if (!sourceEl || !targetPileEl) return;
+    var rectSource = sourceEl.getBoundingClientRect();
+    var rectTarget = targetPileEl.getBoundingClientRect();
+
+    var flying = document.createElement("div");
+    flying.className = "card " + card.color;
+    flying.textContent = cardDisplay(card);
+    flying.style.position = "fixed";
+    flying.style.left = rectSource.left + "px";
+    flying.style.top = rectSource.top + "px";
+    flying.style.width = "92px";
+    flying.style.height = "130px";
+    flying.style.zIndex = "10000";
+    flying.style.pointerEvents = "none";
+    flying.style.transition = "left 0.65s cubic-bezier(0.25, 0.1, 0.25, 1), top 0.65s cubic-bezier(0.25, 0.1, 0.25, 1), transform 0.65s cubic-bezier(0.25, 0.1, 0.25, 1)";
+    document.body.appendChild(flying);
+
+    setTimeout(() => {
+      flying.style.left = (rectTarget.left + 8) + "px";
+      flying.style.top = (rectTarget.top + 8) + "px";
+      flying.style.transform = "scale(0.9) rotate(12deg)";
+    }, 20);
+
+    setTimeout(() => {
+      flying.remove();
+    }, 700);
+  }
+
+  function endPlayerTurn() {
+    while (playerHand.length < 5 && stock.length > 0) playerHand.push(stock.shift());
+    selected = null;
+    hasPlayedThisTurn = false;
+    hasDiscardedThisTurn = false;
+    updateUI();
+    if (playerPayoff.length === 0) return;
+    currentPlayer = "ai";
+    setStatus("AI thinking...");
+    setTimeout(aiTurn, 700);
+  }
+
+  // =====================================================================
+  // SMART AI LOGIC - Wise, Spiteful, and Strategic
+  // Priority order (evaluated strictly in this sequence):
+  // 1. Payoff pile plays (chain as many as possible)
+  // 2. Aces to empty centers
+  // 3. Direct next card needed for own payoff (from hand then sides)
+  // 4. Building long sequences / clearing centers
+  // 5. Defensive/spite plays (deny player easy moves)
+  // 6. Safe filler plays
+  // 7. Smart discard to side stack (always ends turn)
+  // =====================================================================
+
+  function getNextNeededForPayoff(payoffPile) {
+    var top = topCard(payoffPile);
+    if (!top) return null;
+    if (top.rank === 'K') return null; // already at end
+    var val = VALUE[top.rank];
+    if (val >= 13) return null;
+    return RANKS[val]; // next rank after current top
+  }
+
+  function getPlayerPayoffTop() {
+    return topCard(playerPayoff);
+  }
+
+  function wouldHelpPlayer(card, centerIdx) {
+    var playerTop = getPlayerPayoffTop();
+    if (!playerTop) return false;
+    var topOnCenter = topCard(centers[centerIdx]);
+    var intended = getIntendedRank(card, topOnCenter);
+    var nextAfterIntended = (intended === 'K') ? null : RANKS[VALUE[intended]];
+    if (!nextAfterIntended) return false;
+    return nextAfterIntended === playerTop.rank || nextAfterIntended === 'K';
+  }
+
+  function aiCanPlay(card, centerIdx) {
+    return canPlayOn(card, topCard(centers[centerIdx]));
+  }
+
+  function aiPlayCard(sourceType, sourceIndex, centerIdx) {
+    // sourceType: "payoff", "hand", "side"
+    var card;
+    if (sourceType === "payoff") {
+      card = topCard(aiPayoff);
+    } else if (sourceType === "hand") {
+      card = aiHand[sourceIndex];
+    } else if (sourceType === "side") {
+      card = topCard(aiSides[sourceIndex]);
+    }
+    if (!card || !aiCanPlay(card, centerIdx)) return false;
+
+    var intendedRank = getIntendedRank(card, topCard(centers[centerIdx]));
+    var cardCopy = { rank: intendedRank, suit: card.suit, color: card.color };
+
+    // Find source element for animation
+    var sourceEl = null;
+    if (sourceType === "payoff") {
+      sourceEl = document.getElementById("ai-payoff-pile").querySelector(".card");
+    } else if (sourceType === "hand") {
+      sourceEl = document.querySelectorAll("#ai-hand .card")[sourceIndex];
+    } else if (sourceType === "side") {
+      sourceEl = document.querySelectorAll("#ai-sides .pile")[sourceIndex].querySelector(".card");
+    }
+    var targetPileEl = document.querySelectorAll("#centers .pile")[centerIdx];
+
+    if (sourceEl && targetPileEl) {
+      animateCardPlay(sourceEl, cardCopy, targetPileEl);
+    }
+
+    // Remove from source
+    if (sourceType === "payoff") aiPayoff.pop();
+    else if (sourceType === "hand") aiHand.splice(sourceIndex, 1);
+    else if (sourceType === "side") aiSides[sourceIndex].pop();
+
+    // Place on center
+    centers[centerIdx].push(cardCopy);
+
+    // Clear center if Queen or 13+ cards
+    if (intendedRank === 'Q' || centers[centerIdx].length >= 13) {
+      stock = stock.concat(centers[centerIdx]);
+      shuffle(stock);
+      centers[centerIdx] = [];
+    }
+
+    updateUI();
+    setStatus("AI played " + cardDisplay(cardCopy));
+    return true;
+  }
+
+  function aiTurn() {
+    let played = false;
+    let loopSafety = 0; // prevent infinite loops in case of bugs
+
+    // PHASE 1: Aggressively play from payoff pile (chain as many as possible)
+    while (aiPayoff.length > 0 && loopSafety < 20) {
+      loopSafety++;
+      let tp = topCard(aiPayoff);
+      let playedThisLoop = false;
+      for (let i = 0; i < 4; i++) {
+        if (aiCanPlay(tp, i)) {
+          if (aiPlayCard("payoff", 0, i)) {
+            played = true;
+            playedThisLoop = true;
+            break;
+          }
+        }
+      }
+      if (!playedThisLoop) break; // no more payoff plays possible
+    }
+
+    // PHASE 2: Play Aces from hand or side stacks to empty centers
+    if (!played) {
+      // Aces from hand
+      for (let h = 0; h < aiHand.length; h++) {
+        let card = aiHand[h];
+        if (card.rank === 'A') {
+          for (let j = 0; j < 4; j++) {
+            if (!topCard(centers[j])) {
+              if (aiPlayCard("hand", h, j)) {
+                played = true;
+                break;
+              }
+            }
+          }
+          if (played) break;
+        }
+      }
+    }
+
+    if (!played) {
+      // Aces from side stacks
+      for (let s = 0; s < 4; s++) {
+        let card = topCard(aiSides[s]);
+        if (card && card.rank === 'A') {
+          for (let j = 0; j < 4; j++) {
+            if (!topCard(centers[j])) {
+              if (aiPlayCard("side", s, j)) {
+                played = true;
+                break;
+              }
+            }
+          }
+          if (played) break;
+        }
+      }
+    }
+
+    // PHASE 3: Play the exact next card needed for own payoff
+    let needed = getNextNeededForPayoff(aiPayoff);
+    if (needed) {
+      // First try from hand
+      for (let h = 0; h < aiHand.length; h++) {
+        let card = aiHand[h];
+        if (card.rank === needed || card.rank === 'K') {
+          for (let j = 0; j < 4; j++) {
+            if (aiCanPlay(card, j) && !wouldHelpPlayer(card, j)) {
+              if (aiPlayCard("hand", h, j)) {
+                played = true;
+                break;
+              }
+            }
+          }
+          if (played) break;
+        }
+      }
+
+      // Then from side stacks
+      if (!played) {
+        for (let s = 0; s < 4; s++) {
+          let card = topCard(aiSides[s]);
+          if (card && (card.rank === needed || card.rank === 'K')) {
+            for (let j = 0; j < 4; j++) {
+              if (aiCanPlay(card, j) && !wouldHelpPlayer(card, j)) {
+                if (aiPlayCard("side", s, j)) {
+                  played = true;
+                  break;
+                }
+              }
+            }
+            if (played) break;
+          }
+        }
+      }
+    }
+
+    // PHASE 4 & 5: Opportunistic + Spiteful plays (long sequences while denying player)
+    if (!played && aiHand.length > 0) {
+      for (let h = 0; h < aiHand.length; h++) {
+        let card = aiHand[h];
+        for (let j = 0; j < 4; j++) {
+          if (aiCanPlay(card, j)) {
+            // Prefer moves that do NOT help the player
+            if (!wouldHelpPlayer(card, j)) {
+              if (aiPlayCard("hand", h, j)) {
+                played = true;
+                break;
+              }
+            }
+          }
+        }
+        if (played) break;
+      }
+    }
+
+    // Try sides for spiteful/opportunistic plays
+    if (!played) {
+      for (let s = 0; s < 4; s++) {
+        let card = topCard(aiSides[s]);
+        if (card) {
+          for (let j = 0; j < 4; j++) {
+            if (aiCanPlay(card, j) && !wouldHelpPlayer(card, j)) {
+              if (aiPlayCard("side", s, j)) {
+                played = true;
+                break;
+              }
+            }
+          }
+          if (played) break;
+        }
+      }
+    }
+
+    // PHASE 6: Any remaining safe play (fallback)
+    if (!played && aiHand.length > 0) {
+      for (let h = 0; h < aiHand.length; h++) {
+        let card = aiHand[h];
+        for (let j = 0; j < 4; j++) {
+          if (aiCanPlay(card, j)) {
+            if (aiPlayCard("hand", h, j)) {
+              played = true;
+              break;
+            }
+          }
+        }
+        if (played) break;
+      }
+    }
+
+    // Refill hand if empty (standard rule)
+    if (aiHand.length === 0) {
+      while (aiHand.length < 5 && stock.length > 0) {
+        aiHand.push(stock.shift());
+      }
+    }
+
+    updateUI();
+
+    // PHASE 7: Smart Discard to end turn (always discard exactly one card)
+    if (aiHand.length > 0) {
+      let playerNeeded = getNextNeededForPayoff(playerPayoff); // what player wants
+
+      // Prefer to discard a card that does NOT help the player
+      let discardCandidates = aiHand.filter(c => {
+        return !playerNeeded || (c.rank !== playerNeeded && c.rank !== 'K');
+      });
+
+      let discardCard = discardCandidates.length > 0 ? discardCandidates[0] : aiHand[0];
+      let discardIndex = aiHand.indexOf(discardCard);
+
+      // Choose best side stack to discard to (prefer empty or lower value top)
+      let bestSide = 0;
+      let bestScore = -999;
+      for (let s = 0; s < 4; s++) {
+        let top = topCard(aiSides[s]);
+        let score = top ? VALUE[top.rank] || 0 : 20; // empty is best
+        if (score > bestScore) {
+          bestScore = score;
+          bestSide = s;
+        }
+      }
+
+      aiSides[bestSide].push(discardCard);
+      aiHand.splice(discardIndex, 1);
+
+      updateUI();
+      setStatus("AI discarded wisely to side stack → turn ends");
+    }
+
+    // Check win condition
+    if (aiPayoff.length === 0) {
+      setStatus("AI wins 😈", "#ff4444");
+      return;
+    }
+
+    // End AI turn
+    currentPlayer = "player";
+    setStatus("Your turn – must play at least one card");
+  }
+
+  function startGame() {
+    stock = shuffle(createDeck());
+    playerPayoff = stock.splice(0,13);
+    aiPayoff = stock.splice(0,13);
+    playerHand = stock.splice(0,5);
+    aiHand = stock.splice(0,5);
+    playerSides = [[],[],[],[]];
+    aiSides = [[],[],[],[]];
+    centers = [[],[],[],[]];
+    selected = null;
+    hasPlayedThisTurn = false;
+    hasDiscardedThisTurn = false;
+    currentPlayer = playerHand.some(canStartCenter) ? "player" : "ai";
+    updateUI();
+    setStatus(currentPlayer === "player" ? "Your turn – must play at least one card" : "AI starts...");
+    if (currentPlayer === "ai") setTimeout(aiTurn, 800);
+  }
+
+  newBtn.onclick = startGame;
+  startGame();
+</script>
+</body>
+</html>
