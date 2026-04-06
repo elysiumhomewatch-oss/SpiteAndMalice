@@ -1043,26 +1043,33 @@
   });
 
     // ====================== HELP MODAL ======================
-  const helpModal = document.getElementById('help-modal');
-  const helpBtn = document.getElementById('help-btn');
-  const closeHelp = document.getElementById('close-help');
-  const closeHelpBottom = document.getElementById('close-help-bottom');
+  function initHelpModal() {
+    const helpModal = document.getElementById('help-modal');
+    const helpBtn = document.getElementById('help-btn');
+    const closeHelp = document.getElementById('close-help');
+    const closeHelpBottom = document.getElementById('close-help-bottom');
 
-  helpBtn.addEventListener('click', () => {
-    helpModal.style.display = 'block';
-  });
+    if (!helpModal || !helpBtn) return; // Safety check
 
-  function closeHelpModal() {
-    helpModal.style.display = 'none';
+    helpBtn.addEventListener('click', () => {
+      helpModal.style.display = 'block';
+    });
+
+    function closeHelpModal() {
+      helpModal.style.display = 'none';
+    }
+
+    closeHelp.addEventListener('click', closeHelpModal);
+    closeHelpBottom.addEventListener('click', closeHelpModal);
+
+    // Close when clicking outside content
+    helpModal.addEventListener('click', (e) => {
+      if (e.target === helpModal) closeHelpModal();
+    });
   }
 
-  closeHelp.addEventListener('click', closeHelpModal);
-  closeHelpBottom.addEventListener('click', closeHelpModal);
-
-  // Close modal when clicking outside the content
-  helpModal.addEventListener('click', (e) => {
-    if (e.target === helpModal) closeHelpModal();
-  });
+  // Run after everything is loaded
+  window.addEventListener('load', initHelpModal);
   
 </script>
 
