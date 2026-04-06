@@ -1,4 +1,4 @@
-const CACHE_NAME = 'spite-durban-v2';
+const CACHE_NAME = 'spite';
 const urlsToCache = [
   './',
   'index.html',
