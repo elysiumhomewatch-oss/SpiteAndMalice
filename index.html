@@ -602,8 +602,11 @@
     hasPlayedThisTurn = true;
     selected = null;
 
-    if (playerHand.length === 0) {
-      while (playerHand.length < 5 && stock.length > 0) playerHand.push(stock.shift());
+    // IMPORTANT FIX: Refill hand immediately if empty, so player can continue playing in the same turn
+    if (playerHand.length === 0 && !hasDiscardedThisTurn) {
+      while (playerHand.length < 5 && stock.length > 0) {
+        playerHand.push(stock.shift());
+      }
     }
 
     updateUI();
