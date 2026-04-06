@@ -3,8 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-  <title>Spite and Maiice v0.1</title>
+  <title>Spite • Durban Rules</title>
+  
+    <!-- PWA: Installable + Fullscreen -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0b4a38">
+  <meta name="mobile-web-app-capable" content="yes">           <!-- modern replacement -->
+  <meta name="apple-mobile-web-app-capable" content="yes">     <!-- keep for older iOS -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Spite Durban">
+  
   <style>
+    /* Your existing styles remain unchanged */
     :root {
       --felt: #0b4a38;
       --dark-felt: #083728;
@@ -1002,6 +1012,27 @@
 
   newBtn.onclick = startGame;
   startGame();
+
+  // ====================== PWA: Make installable + Fullscreen ======================
+  // Register Service Worker for installability (caching)
+   if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      // Use relative path because your site is in /SpiteAndMalice/ subfolder
+      navigator.serviceWorker.register('sw.js')
+        .then(reg => console.log('✅ Service Worker registered successfully', reg))
+        .catch(err => console.log('❌ Service Worker registration failed', err));
+    });
+  }
+
+  // Optional: Prompt install banner on mobile
+  let deferredPrompt;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    // You can show a custom "Install" button here if you want
+    console.log('App can be installed');
+  });
+  
 </script>
 </body>
 </html>
