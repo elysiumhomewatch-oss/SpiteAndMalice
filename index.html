@@ -1014,7 +1014,7 @@
   newBtn.onclick = startGame;
   startGame();
 
-   // ====================== PWA: Make installable + Fullscreen ======================
+  // ====================== PWA: Make installable + Fullscreen ======================
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('sw.js', { scope: './' })
@@ -1034,15 +1034,6 @@
     deferredPrompt = e;
     console.log('📲 App can be installed - ready for install prompt');
     // You can later add a visible Install button if you want
-  });
-
-  // Optional: Prompt install banner on mobile
-  let deferredPrompt;
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    // You can show a custom "Install" button here if you want
-    console.log('App can be installed');
   });
   
 </script>
