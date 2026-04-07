@@ -284,6 +284,14 @@
   <div class="section">
     <h3>CENTER PILES • A→Q • Kings Wild</h3>
     <div id="centers" class="cards"></div>
+      <div class="section">
+    <h3>CENTER PILES • A→Q • Kings Wild</h3>
+    <div id="centers" class="cards"></div>
+    
+    <!-- NEW: Clear Turn Indicator -->
+    <div id="turn-indicator" style="margin: 15px auto; padding: 12px 24px; border-radius: 50px; font-size: 1.4rem; font-weight: bold; text-align: center; max-width: 380px; box-shadow: 0 6px 20px rgba(0,0,0,0.6); transition: all 0.4s;">
+    </div>
+  </div>
   </div>
 
   <div class="player-row">
@@ -579,6 +587,7 @@ function loadMultiplayerStateFromView(v) {
   stock        = v.stock || [];
   
   currentPlayer = (v.myRole === v.currentPlayer) ? "player" : "ai";
+    updateTurnStatus();
   
   // Reset local turn flags safely
   selected = null;
@@ -634,6 +643,7 @@ async function startPolling() {
         }
 
         updateUI();
+          
         updateTurnStatus();
 
         if (playerPayoff.length === 0) endHand("player");
@@ -815,17 +825,28 @@ async function tryReconnectToRoom() {
       aiHandDiv.appendChild(back);
     }
       updateTurnStatus();   // keep the turn banner always up-to-date
+      
   }
 
 function updateTurnStatus() {
-  if (!isMultiplayer) return;
+  const indicator = document.getElementById('turn-indicator');
+  if (!isMultiplayer) {
+    indicator.style.display = 'none';
+    return;
+  }
+
+  indicator.style.display = 'block';
 
   if (currentPlayer === "player") {
-    setStatus("✅ YOUR TURN – play as many cards as you can, then discard to end turn", "#00ff88");
-    statusEl.style.fontSize = "1.45rem";
+    indicator.innerHTML = `✅ <span style="color:#00ff88;">YOUR TURN</span> – Play cards to centers, then discard to end turn`;
+    indicator.style.background = 'rgba(0, 255, 136, 0.15)';
+    indicator.style.color = '#00ff88';
+    indicator.style.border = '3px solid #00ff88';
   } else {
-    setStatus("⏳ Opponent is thinking... (updates every 5s after 10 seconds)", "#ffaa00");
-    statusEl.style.fontSize = "1.35rem";
+    indicator.innerHTML = `⏳ <span style="color:#ffaa00;">OPPONENT'S TURN</span> – Waiting for them to play...`;
+    indicator.style.background = 'rgba(255, 170, 0, 0.15)';
+    indicator.style.color = '#ffaa00';
+    indicator.style.border = '3px solid #ffaa00';
   }
 }
 
