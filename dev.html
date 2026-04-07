@@ -642,18 +642,41 @@
     setStatus(type === "hand" ? "Tap center or side stack" : "Tap center pile to play");
   }
 
-  function discardToSide(sideIdx) {
-    if (currentPlayer !== "player" || !selected || !selected.startsWith("hand-") || hasDiscardedThisTurn) return;
-    var handIdx = parseInt(selected.split('-')[1]);
-    var card = playerHand[handIdx];
-    playerSides[sideIdx].push(card);
-    playerHand.splice(handIdx, 1);
-    hasDiscardedThisTurn = true;
-    selected = null;
-    updateUI();
-    setStatus("Discarded to side stack");
-    endPlayerTurn();
+function discardToSide(sideIdx) {
+  if (currentPlayer !== "player" || !selected || !selected.startsWith("hand-") || hasDiscardedThisTurn) return;
+
+  if (isMultiplayer) {
+    const handIdx = parseInt(selected.split('-')[1]);
+    callBackend('discardToSide', {
+      roomCode: roomCode,
+      playerRole: myRole,
+      sideIdx: sideIdx,
+      handIdx: handIdx
+    }).then(result => {
+      if (result.success) {
+        selected = null;
+        hasDiscardedThisTurn = true;
+        updateUI();
+        setStatus("Discarded to side stack – waiting for opponent");
+        currentPlayer = "ai"; // polling will handle the actual switch
+      } else {
+        setStatus(result.error || "Discard failed", "#ff6666");
+      }
+    });
+    return;
   }
+
+  // Single-player fallback (unchanged)
+  var handIdx = parseInt(selected.split('-')[1]);
+  var card = playerHand[handIdx];
+  playerSides[sideIdx].push(card);
+  playerHand.splice(handIdx, 1);
+  hasDiscardedThisTurn = true;
+  selected = null;
+  updateUI();
+  setStatus("Discarded to side stack");
+  endPlayerTurn();
+}
 
   // ====================== MULTIPLAYER OVERRIDE: tryPlayToCenter ======================
   const originalTryPlayToCenter = tryPlayToCenter || function(){};
@@ -756,25 +779,28 @@
     setTimeout(() => flying.remove(), 700);
   }
 
-  function endPlayerTurn() {
-    while (playerHand.length < 5 && stock.length > 0) playerHand.push(stock.shift());
-    selected = null;
-    hasPlayedThisTurn = false;
-    hasDiscardedThisTurn = false;
-    currentStreak = 0;
-    updateUI();
-    if (playerPayoff.length === 0) return;
+function endPlayerTurn() {
+  selected = null;
+  hasPlayedThisTurn = false;
+  hasDiscardedThisTurn = false;
+  currentStreak = 0;
 
-    if (isMultiplayer) {
-      currentPlayer = "ai";
-      setStatus("Waiting for opponent...");
-      // Polling will handle the rest
-    } else {
-      currentPlayer = "ai";
-      setStatus("AI thinking...");
-      setTimeout(aiTurn, 600);
-    }
+  if (isMultiplayer) {
+    // In multiplayer we already sent the move/discard to the server
+    // Polling will update the board and switch turn automatically
+    updateUI();
+    setStatus("Waiting for opponent...");
+    return;
   }
+
+  // Single-player only
+  while (playerHand.length < 5 && stock.length > 0) playerHand.push(stock.shift());
+  updateUI();
+  if (playerPayoff.length === 0) return;
+  currentPlayer = "ai";
+  setStatus("AI thinking...");
+  setTimeout(aiTurn, 600);
+}
 
   // ====================== SMART AI LOGIC (unchanged for single-player) ======================
   // (your existing aiTurn, getNextNeededForPayoff, wouldHelpPlayer, aiCanPlay, aiPlayCard, etc. remain exactly as they were)
@@ -1138,8 +1164,9 @@
     };
 
     joinBtn.onclick = () => {
-      const code = prompt('Enter 6-digit room code:').toUpperCase().trim();
-      if (code) joinRoom(code);
+      const codeInput = prompt('Enter 6-digit room code:');
+      const code = codeInput ? codeInput.toUpperCase().trim() : '';
+    if (code) joinRoom(code);
     };
 
     closeBtn.onclick = () => {
