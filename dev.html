@@ -706,15 +706,12 @@ async function startPolling() {
       updateTurnStatus();   // keep the turn banner always up-to-date
   }
 
-  function updateTurnStatus() {
-  if (!isMultiplayer) {
-    // Single-player already handled by AI logic
-    return;
-  }
+function updateTurnStatus() {
+  if (!isMultiplayer) return;
 
   if (currentPlayer === "player") {
-    setStatus("✅ YOUR TURN – play as many cards as you can!", "#00ff88");
-    statusEl.style.fontSize = "1.5rem";
+    setStatus("✅ YOUR TURN – play as many cards as you can, then discard to end turn", "#00ff88");
+    statusEl.style.fontSize = "1.45rem";
   } else {
     setStatus("⏳ Opponent is thinking...", "#ffaa00");
     statusEl.style.fontSize = "1.35rem";
@@ -740,7 +737,7 @@ function discardToSide(sideIdx) {
   var handIdx = parseInt(selected.split('-')[1]);
   var card = playerHand[handIdx];
 
-  // === OPTIMISTIC UPDATE ===
+  // Optimistic update
   playerSides[sideIdx].push(card);
   playerHand.splice(handIdx, 1);
   hasDiscardedThisTurn = true;
@@ -750,7 +747,6 @@ function discardToSide(sideIdx) {
   setStatus("Discarded to side stack");
 
   if (isMultiplayer) {
-    // Background sync only
     callBackend('discardToSide', {
       roomCode: roomCode,
       playerRole: myRole,
@@ -763,11 +759,12 @@ function discardToSide(sideIdx) {
     });
   }
 
-  endPlayerTurn();   // handles waiting message + polling
+  endPlayerTurn();   // ← Only here do we end the turn
 }
 
   // ====================== MULTIPLAYER OVERRIDE: tryPlayToCenter ======================
   const originalTryPlayToCenter = tryPlayToCenter || function(){};
+  
 async function tryPlayToCenter(i) {
   if (currentPlayer !== "player" || !selected) return;
 
@@ -785,7 +782,6 @@ async function tryPlayToCenter(i) {
   var intendedRank = getIntendedRank(card, topCard(centers[i]));
   var cardCopy = { rank: intendedRank, suit: card.suit, color: card.color };
 
-  // Animation + local state change
   var sourceEl = null;
   if (type === "hand") sourceEl = document.querySelectorAll("#player-hand .card")[idx];
   else if (type === "payoff") sourceEl = document.getElementById("player-payoff-pile").querySelector(".card");
@@ -825,7 +821,7 @@ async function tryPlayToCenter(i) {
     return;
   }
 
-  // === BACKGROUND SERVER SYNC (non-blocking) ===
+  // === BACKGROUND SERVER SYNC ===
   if (isMultiplayer) {
     const sourceType = type === "payoff" ? "payoff" : type === "hand" ? "hand" : "side";
     const sourceIdx = (type === "payoff") ? 0 : idx;
@@ -839,14 +835,12 @@ async function tryPlayToCenter(i) {
     }).then(result => {
       if (!result.success) {
         setStatus(result.error || "Server rejected move", "#ff6666");
-        // Polling will automatically correct the board in <2s
       }
     });
-  } else {
-    // Single-player already handled above
   }
 
-  endPlayerTurn();   // this now just sets "waiting for opponent" in multiplayer
+  // DO NOT call endPlayerTurn() here — player can continue playing!
+  // Turn only ends when they discard to a side stack.
 }
 
   function animateCardPlay(sourceEl, card, targetPileEl) {
