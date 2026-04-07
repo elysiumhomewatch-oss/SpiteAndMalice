@@ -871,19 +871,20 @@ function discardToSide(sideIdx) {
     callBackend('endTurn', {
       roomCode: roomCode,
       playerRole: myRole,
-      centers: JSON.stringify(centers),      // ← Must be stringified
-      mySides: JSON.stringify(playerSides),  // ← Must be stringified
-      myHand: JSON.stringify(playerHand),    // ← Must be stringified
-      myPayoff: JSON.stringify(playerPayoff) // ← Must be stringified
+      centers: JSON.stringify(centers),
+      mySides: JSON.stringify(playerSides),
+      myHand: JSON.stringify(playerHand),
+      myPayoff: JSON.stringify(playerPayoff),
+      stock: JSON.stringify(stock)        // ←←← ADD THIS LINE
     }).then(result => {
       if (result.success) {
         setStatus("Turn completed", "#00ff88");
       } else {
-        setStatus(result.error || "Server rejected turn", "#ff6666");
+        setStatus(result.error || "Failed to save turn", "#ff6666");
       }
     }).catch(err => {
       console.error(err);
-      setStatus("Failed to save turn", "#ff6666");
+      setStatus("Connection error", "#ff6666");
     });
   }
 
