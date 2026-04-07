@@ -924,13 +924,19 @@ async function tryPlayToCenter(i) {
     centers[i] = [];
   }
 
-  // Auto-refill hand if empty (local only)
+  // Auto-refill hand if empty
+  // Multiplayer: let the SERVER do the refill at endTurn (prevents duplication)
   if (playerHand.length === 0) {
-    while (playerHand.length < 5 && stock.length > 0) {
-      playerHand.push(stock.shift());
+    if (!isMultiplayer) {
+      while (playerHand.length < 5 && stock.length > 0) {
+        playerHand.push(stock.shift());
+      }
+    } else {
+      // In multiplayer we just leave the hand short for now.
+      // The server will top it up to 5 cards at the end of the turn.
+      // (still fully legal — player just can't play the new cards this exact turn)
     }
   }
-
   // Streak
   currentStreak++;
   currentStreakFromPayoff = (type === "payoff");
