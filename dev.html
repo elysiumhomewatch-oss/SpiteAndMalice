@@ -691,112 +691,117 @@ function startMultiplayerAfterCreate() {
 function discardToSide(sideIdx) {
   if (currentPlayer !== "player" || !selected || !selected.startsWith("hand-") || hasDiscardedThisTurn) return;
 
+  var handIdx = parseInt(selected.split('-')[1]);
+  var card = playerHand[handIdx];
+
+  // === OPTIMISTIC UPDATE ===
+  playerSides[sideIdx].push(card);
+  playerHand.splice(handIdx, 1);
+  hasDiscardedThisTurn = true;
+  selected = null;
+
+  updateUI();
+  setStatus("Discarded to side stack");
+
   if (isMultiplayer) {
-    const handIdx = parseInt(selected.split('-')[1]);
+    // Background sync only
     callBackend('discardToSide', {
       roomCode: roomCode,
       playerRole: myRole,
       sideIdx: sideIdx,
       handIdx: handIdx
     }).then(result => {
-      if (result.success) {
-        selected = null;
-        hasDiscardedThisTurn = true;
-        updateUI();
-        setStatus("Discarded to side stack – waiting for opponent");
-        currentPlayer = "ai"; // polling will handle the actual switch
-      } else {
+      if (!result.success) {
         setStatus(result.error || "Discard failed", "#ff6666");
       }
     });
-    return;
   }
 
-  // Single-player fallback (unchanged)
-  var handIdx = parseInt(selected.split('-')[1]);
-  var card = playerHand[handIdx];
-  playerSides[sideIdx].push(card);
-  playerHand.splice(handIdx, 1);
-  hasDiscardedThisTurn = true;
-  selected = null;
-  updateUI();
-  setStatus("Discarded to side stack");
-  endPlayerTurn();
+  endPlayerTurn();   // handles waiting message + polling
 }
 
   // ====================== MULTIPLAYER OVERRIDE: tryPlayToCenter ======================
   const originalTryPlayToCenter = tryPlayToCenter || function(){};
-  async function tryPlayToCenter(i) {
-    if (!isMultiplayer) {
-      return originalTryPlayToCenter.call(this, i); // fallback to single-player logic
-    }
-    if (currentPlayer !== "player" || !selected) return;
+async function tryPlayToCenter(i) {
+  if (currentPlayer !== "player" || !selected) return;
 
-    var parts = selected.split('-');
-    var type = parts[0], idx = parseInt(parts[1]);
-    var card = type === "hand" ? playerHand[idx] : 
-               type === "payoff" ? topCard(playerPayoff) : topCard(playerSides[idx]);
+  var parts = selected.split('-');
+  var type = parts[0], idx = parseInt(parts[1]);
+  var card = type === "hand" ? playerHand[idx] : 
+             type === "payoff" ? topCard(playerPayoff) : topCard(playerSides[idx]);
 
-    if (!card || !canPlayOn(card, topCard(centers[i]))) {
-      setStatus("Illegal move", "#ff6666");
-      return;
-    }
+  if (!card || !canPlayOn(card, topCard(centers[i]))) {
+    setStatus("Illegal move", "#ff6666");
+    return;
+  }
 
+  // === OPTIMISTIC UPDATE (instant feel) ===
+  var intendedRank = getIntendedRank(card, topCard(centers[i]));
+  var cardCopy = { rank: intendedRank, suit: card.suit, color: card.color };
+
+  // Animation + local state change
+  var sourceEl = null;
+  if (type === "hand") sourceEl = document.querySelectorAll("#player-hand .card")[idx];
+  else if (type === "payoff") sourceEl = document.getElementById("player-payoff-pile").querySelector(".card");
+  else sourceEl = document.querySelectorAll("#player-sides .pile")[idx].querySelector(".card");
+
+  var targetPileEl = document.querySelectorAll("#centers .pile")[i];
+  if (sourceEl && targetPileEl) animateCardPlay(sourceEl, cardCopy, targetPileEl);
+
+  // Remove card locally
+  if (type === "hand") playerHand.splice(idx, 1);
+  else if (type === "payoff") playerPayoff.pop();
+  else playerSides[idx].pop();
+
+  centers[i].push(cardCopy);
+
+  if (intendedRank === 'Q' || centers[i].length >= 13) {
+    stock = stock.concat(centers[i]);
+    shuffle(stock);
+    centers[i] = [];
+  }
+
+  // Streak & UI
+  currentStreak++;
+  currentStreakFromPayoff = (type === "payoff");
+  const points = getStreakPoints(currentStreak, currentStreakFromPayoff);
+  handStreakBonus += points;
+  showStreak();
+
+  hasPlayedThisTurn = true;
+  selected = null;
+
+  updateUI();
+  setStatus(`Played ${cardDisplay(cardCopy)} (+${points})`);
+
+  if (playerPayoff.length === 0) {
+    endHand("player");
+    return;
+  }
+
+  // === BACKGROUND SERVER SYNC (non-blocking) ===
+  if (isMultiplayer) {
     const sourceType = type === "payoff" ? "payoff" : type === "hand" ? "hand" : "side";
     const sourceIdx = (type === "payoff") ? 0 : idx;
 
-    const result = await callBackend('playMove', {
+    callBackend('playMove', {
       roomCode: roomCode,
       playerRole: myRole,
       sourceType: sourceType,
       sourceIdx: sourceIdx,
       centerIdx: i
+    }).then(result => {
+      if (!result.success) {
+        setStatus(result.error || "Server rejected move", "#ff6666");
+        // Polling will automatically correct the board in <2s
+      }
     });
-
-    if (result.success) {
-      // Local optimistic update for instant feel (server already applied it)
-      var intendedRank = getIntendedRank(card, topCard(centers[i]));
-      var cardCopy = { rank: intendedRank, suit: card.suit, color: card.color };
-
-      var sourceEl = null;
-      if (type === "hand") sourceEl = document.querySelectorAll("#player-hand .card")[idx];
-      else if (type === "payoff") sourceEl = document.getElementById("player-payoff-pile").querySelector(".card");
-      else sourceEl = document.querySelectorAll("#player-sides .pile")[idx].querySelector(".card");
-
-      var targetPileEl = document.querySelectorAll("#centers .pile")[i];
-      if (sourceEl && targetPileEl) animateCardPlay(sourceEl, cardCopy, targetPileEl);
-
-      if (type === "hand") playerHand.splice(idx,1);
-      else if (type === "payoff") playerPayoff.pop();
-      else playerSides[idx].pop();
-
-      centers[i].push(cardCopy);
-
-      if (intendedRank === 'Q' || centers[i].length >= 13) {
-        stock = stock.concat(centers[i]);
-        shuffle(stock);
-        centers[i] = [];
-      }
-
-      currentStreak++;
-      currentStreakFromPayoff = (type === "payoff");
-      const points = getStreakPoints(currentStreak, currentStreakFromPayoff);
-      handStreakBonus += points;
-      showStreak();
-
-      hasPlayedThisTurn = true;
-      selected = null;
-
-      updateUI();
-      setStatus(`Played ${cardDisplay(cardCopy)} (+${points})`);
-
-      if (playerPayoff.length === 0) {
-        endHand("player");
-      }
-    } else {
-      setStatus(result.error || "Server rejected move", "#ff6666");
-    }
+  } else {
+    // Single-player already handled above
   }
+
+  endPlayerTurn();   // this now just sets "waiting for opponent" in multiplayer
+}
 
   function animateCardPlay(sourceEl, card, targetPileEl) {
     if (!sourceEl || !targetPileEl) return;
@@ -832,8 +837,7 @@ function endPlayerTurn() {
   currentStreak = 0;
 
   if (isMultiplayer) {
-    // In multiplayer we already sent the move/discard to the server
-    // Polling will update the board and switch turn automatically
+    // In multiplayer we already did the optimistic update
     updateUI();
     setStatus("Waiting for opponent...");
     return;
