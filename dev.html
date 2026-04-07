@@ -434,15 +434,30 @@
   }
 
   // ====================== MULTIPLAYER HELPER FUNCTIONS ======================
-  async function callBackend(action, extraParams = {}) {
-    const params = new URLSearchParams({ action, ...extraParams });
+async function callBackend(action, extraParams = {}) {
+  const params = new URLSearchParams({ action, ...extraParams });
+  
+  try {
     const response = await fetch(WEB_APP_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params.toString()
     });
-    return await response.json();
+
+    if (!response.ok) {
+      throw new Error(`HTTP error ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (err) {
+    console.error('Backend call failed:', err);
+    return { 
+      success: false, 
+      error: 'Connection error. Please check your internet and try again.' 
+    };
   }
+}
 
 async function createRoom() {
   const modalTitle = document.getElementById('modal-title');
