@@ -252,10 +252,60 @@
 
 <div class="table">
   <h1>Spite and Malice v2</h1>
-  
-  <!-- === SECTION B: PASTE YOUR FULL ORIGINAL TABLE CONTENT HERE === -->
-  <!-- From <div class="scoreboard"> all the way to the end of the player-row div -->
-  <!-- IMPORTANT: Remove the duplicate <div class="section"> and second <div id="centers"> you had before -->
+  <div class="scoreboard">
+    <div class="score-box">
+      YOU: <span id="player-total-score">0</span>
+    </div>
+    <div class="score-box">
+      AI: <span id="ai-total-score">0</span>
+    </div>
+  </div>
+
+  <div id="status">Ready...</div>
+
+  <div class="ai-row">
+    <div class="pile-group">
+      <h3>Opponent Side Stacks</h3>
+      <div id="ai-sides" class="cards"></div>
+    </div>
+    <div class="pile-group">
+      <h3>Opponent Hand</h3>
+      <div id="ai-hand" class="cards"></div>
+    </div>
+    <div class="pile-group">
+      <h3>Opponent Payoff: <span id="ai-payoff">13</span> left</h3>
+      <div id="ai-payoff-pile" class="pile gold-frame"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>CENTER PILES • A→Q • Kings Wild</h3>
+    <div id="centers" class="cards"></div>
+      <div class="section">
+    
+    
+    <!-- NEW: Clear Turn Indicator -->
+    <div id="turn-indicator" style="margin: 15px auto; padding: 12px 24px; border-radius: 50px; font-size: 1.4rem; font-weight: bold; text-align: center; max-width: 380px; box-shadow: 0 6px 20px rgba(0,0,0,0.6); transition: all 0.4s;">
+    </div>
+  </div>
+  </div>
+
+  <div class="player-row">
+    <div class="pile-group">
+      <h3>Your Payoff: <span id="player-payoff">13</span> left (tap to play)</h3>
+      <div id="player-payoff-pile" class="pile gold-frame"></div>
+    </div>
+
+    <div class="pile-group">
+      <h3>Your Hand</h3>
+      <div id="player-hand" class="cards"></div>
+    </div>
+
+    <div class="pile-group">
+      <h3>Your Side Stacks</h3>
+      <div id="player-sides" class="cards"></div>
+    </div>
+  </div>
 </div>
 
 <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
