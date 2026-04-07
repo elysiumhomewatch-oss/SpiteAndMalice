@@ -907,6 +907,12 @@ async function tryPlayToCenter(i) {
   else playerSides[idx].pop();
 
   centers[i].push(cardCopy);
+    // Optimistic hand refill (instant feel)
+  if (playerHand.length === 0) {
+    while (playerHand.length < 5 && stock.length > 0) {
+      playerHand.push(stock.shift());
+    }
+  }
 
   if (intendedRank === 'Q' || centers[i].length >= 13) {
     stock = stock.concat(centers[i]);
@@ -1258,49 +1264,60 @@ function endPlayerTurn() {
     setStatus("Your turn – play as many as you can!");
   }
 
-  function endHand(winner) {
-    let basePoints = 5;
-    let remainingBonus = winner === "player" ? aiPayoff.length : playerPayoff.length;
-    let totalHandScore = basePoints + remainingBonus + handStreakBonus;
+function endHand(winner) {
+  let basePoints = 5;
+  let remainingBonus = winner === "player" ? aiPayoff.length : playerPayoff.length;
+  let totalHandScore = basePoints + remainingBonus + handStreakBonus;
 
-    if (winner === "player") {
-      playerTotalScore += totalHandScore;
-    } else {
-      aiTotalScore += totalHandScore;
-    }
-
-    updateScores();
-    showResultsScreen(winner, basePoints, remainingBonus, handStreakBonus, totalHandScore);
-
-    handStreakBonus = 0;
-    if (isMultiplayer) {
-      stopPolling();
-      clearCurrentRoom();
-      isMultiplayer = false;
-      roomCode = null;
-      myRole = null;
-    }
+  if (winner === "player") {
+    playerTotalScore += totalHandScore;
+  } else {
+    aiTotalScore += totalHandScore;
   }
 
-  function showResultsScreen(winner, base, remaining, streakBonus, total) {
-    const screen = document.getElementById('results-screen');
-    const title = document.getElementById('result-title');
-    const details = document.getElementById('result-details');
+  updateScores();
 
-    title.textContent = winner === "player" ? "🎉 YOU WIN THE HAND!" : "😈 AI WINS THE HAND";
-    title.style.color = winner === "player" ? "#00ff88" : "#ff6666";
+  const isWinner = winner === "player";
+  showResultsScreen(isWinner, basePoints, remainingBonus, handStreakBonus, totalHandScore);
 
-    details.innerHTML = `
-      <p><strong>Hand Win Bonus:</strong> +${base}</p>
-      <p><strong>Opponent Cards Left:</strong> +${remaining}</p>
-      <p><strong>Streak Combo Bonus:</strong> +${streakBonus}</p>
-      <hr style="border-color:#555">
-      <p style="font-size:1.4rem"><strong>Total This Hand: ${total} points</strong></p>
-      <p style="margin-top:15px">Your Total: ${playerTotalScore}  AI Total: ${aiTotalScore}</p>
-    `;
+  handStreakBonus = 0;
 
-    screen.style.display = 'flex';
+  if (isMultiplayer) {
+    // Clean up room on both devices + server
+    clearCurrentRoom();
+    callBackend('cleanupRoom', { roomCode: roomCode });
+    stopPolling();
+    isMultiplayer = false;
+    roomCode = null;
+    myRole = null;
   }
+}
+
+function showResultsScreen(isWinner, base, remaining, streakBonus, total) {
+  const screen = document.getElementById('results-screen');
+  const title = document.getElementById('result-title');
+  const details = document.getElementById('result-details');
+
+  if (isWinner) {
+    title.textContent = "🎉 YOU WIN THE HAND!";
+    title.style.color = "#00ff88";
+  } else {
+    title.textContent = "😔 You lost the hand";
+    title.style.color = "#ff6666";
+  }
+
+  details.innerHTML = `
+    <p><strong>Hand Win Bonus:</strong> +${base}</p>
+    <p><strong>Opponent Cards Left:</strong> +${remaining}</p>
+    <p><strong>Streak Combo Bonus:</strong> +${streakBonus}</p>
+    <hr style="border-color:#555">
+    <p style="font-size:1.4rem"><strong>Total This Hand: ${total} points</strong></p>
+    <p style="margin-top:15px">Your Total: ${playerTotalScore}  AI Total: ${aiTotalScore}</p>
+    ${!isWinner ? '<p style="color:#ffaa00; margin-top:10px;">Better luck next hand!</p>' : ''}
+  `;
+
+  screen.style.display = 'flex';
+}
 
   document.getElementById('continue-btn').onclick = () => {
     document.getElementById('results-screen').style.display = 'none';
