@@ -858,37 +858,36 @@ function discardToSide(sideIdx) {
   var handIdx = parseInt(selected.split('-')[1]);
   var card = playerHand[handIdx];
 
-  // Optimistic local update
+  // Local optimistic update
   playerSides[sideIdx].push(card);
   playerHand.splice(handIdx, 1);
   hasDiscardedThisTurn = true;
   selected = null;
 
   updateUI();
-  setStatus("Ending turn — saving full turn to server...");
+  setStatus("Ending turn — saving to server...");
 
   if (isMultiplayer) {
-    // Send the complete final state of this turn (this is the ONLY server update)
     callBackend('endTurn', {
       roomCode: roomCode,
       playerRole: myRole,
-      centers: centers,          // all center piles after your plays
-      mySides: playerSides,      // your side stacks
-      myHand: playerHand,        // your hand (after refill)
-      myPayoff: playerPayoff     // your payoff pile
+      centers: JSON.stringify(centers),      // ← Must be stringified
+      mySides: JSON.stringify(playerSides),  // ← Must be stringified
+      myHand: JSON.stringify(playerHand),    // ← Must be stringified
+      myPayoff: JSON.stringify(playerPayoff) // ← Must be stringified
     }).then(result => {
       if (result.success) {
-        setStatus("Turn saved successfully", "#00ff88");
+        setStatus("Turn completed", "#00ff88");
       } else {
-        setStatus(result.error || "Failed to save turn", "#ff6666");
+        setStatus(result.error || "Server rejected turn", "#ff6666");
       }
     }).catch(err => {
       console.error(err);
-      setStatus("Connection error while saving turn", "#ff6666");
+      setStatus("Failed to save turn", "#ff6666");
     });
   }
 
-  endPlayerTurn();   // switches to waiting state locally
+  endPlayerTurn();
 }
 
   // ====================== MULTIPLAYER OVERRIDE: tryPlayToCenter ======================
