@@ -431,20 +431,66 @@
     return await response.json();
   }
 
-  async function createRoom() {
-    const result = await callBackend('create');
-    if (result.success) {
-      roomCode = result.roomCode;
-      myRole = 'p1';
-      isMultiplayer = true;
-      loadMultiplayerState(result.state);
-      document.getElementById('multi-modal').style.display = 'none';
-      setStatus(`Room created: ${roomCode} – share this code!`);
-      startPolling();
-    } else {
-      alert(result.error || 'Failed to create room');
-    }
+async function createRoom() {
+  const modalTitle = document.getElementById('modal-title');
+  const content = document.getElementById('lobby-content');
+
+  // Show loading state
+  modalTitle.textContent = 'Creating Room...';
+  content.innerHTML = `
+    <div style="text-align:center; padding:40px 20px;">
+      <p style="font-size:1.3rem; margin-bottom:20px;">Please wait...</p>
+      <div style="width:50px; height:50px; border:6px solid #f0c14e; border-top-color:transparent; border-radius:50%; animation: spin 1s linear infinite; margin:0 auto;"></div>
+    </div>
+  `;
+
+  const result = await callBackend('create');
+
+  if (result.success) {
+    roomCode = result.roomCode;
+    myRole = 'p1';
+    isMultiplayer = true;
+    loadMultiplayerState(result.state);
+
+    // Show room code nicely
+    modalTitle.textContent = '🎉 Room Created!';
+    content.innerHTML = `
+      <p style="margin:10px 0 5px; font-size:1.1rem;">Share this code with your friend:</p>
+      <div style="background:#05261f; padding:15px; border-radius:12px; font-size:2.2rem; font-weight:bold; letter-spacing:8px; margin:15px 0; border:3px solid #f0c14e;" id="room-code-display">
+        ${roomCode}
+      </div>
+      <button onclick="copyRoomCode()" style="background:#f0c14e; color:#222; padding:12px 24px; border:none; border-radius:10px; font-size:1.2rem; font-weight:bold; margin:10px 0;">📋 Copy Code</button>
+      <p style="font-size:0.95rem; margin-top:15px; opacity:0.9;">Your friend should open the game and tap <strong>Join Room</strong>, then enter this code.</p>
+      <button onclick="startMultiplayerAfterCreate()" style="margin-top:20px; background:#00ff88; color:#222; padding:12px 30px; border:none; border-radius:10px; font-size:1.1rem; font-weight:bold;">I'm Ready – Start Playing</button>
+    `;
+    startPolling();
+    setStatus(`Room ${roomCode} created – waiting for opponent`);
+  } else {
+    content.innerHTML = `<p style="color:#ff6666;">${result.error || 'Failed to create room'}</p>`;
+    modalTitle.textContent = 'Error';
   }
+}
+
+ function copyRoomCode() {
+  const code = document.getElementById('room-code-display').textContent.trim();
+  navigator.clipboard.writeText(code).then(() => {
+    const btns = document.querySelectorAll('#lobby-content button');
+    for (let b of btns) {
+      if (b.textContent.includes('Copy')) {
+        const original = b.textContent;
+        b.textContent = '✅ Copied!';
+        setTimeout(() => { b.textContent = original; }, 2000);
+      }
+    }
+  });
+}
+
+function startMultiplayerAfterCreate() {
+  document.getElementById('multi-modal').style.display = 'none';
+  // Game is already loaded and polling started
+  updateUI();
+  setStatus(`Room ${roomCode} – waiting for opponent to join...`);
+} 
 
   async function joinRoom(code) {
     const result = await callBackend('join', { roomCode: code });
@@ -1152,27 +1198,30 @@ function endPlayerTurn() {
   };
 
   // ====================== MULTIPLAYER MODAL & BUTTONS ======================
-  function initMultiplayerModal() {
-    const modal = document.getElementById('multi-modal');
-    const createBtn = document.getElementById('multi-create-btn');
-    const joinBtn = document.getElementById('multi-join-btn');
-    const closeBtn = document.getElementById('close-multi');
+function initMultiplayerModal() {
+  const modal = document.getElementById('multi-modal');
+  const createBtn = document.getElementById('multi-create-btn');
+  const joinBtn = document.getElementById('multi-join-btn');
+  const closeBtn = document.getElementById('close-multi');
 
-    createBtn.onclick = () => {
+  createBtn.onclick = async () => {
+    modal.style.display = 'flex';
+    createRoom();   // this will now handle loading + showing the code inside the modal
+  };
+
+  joinBtn.onclick = () => {
+    const codeInput = prompt('Enter 6-digit room code:');
+    const code = codeInput ? codeInput.toUpperCase().trim() : '';
+    if (code) {
       modal.style.display = 'flex';
-      createRoom();
-    };
+      joinRoom(code);
+    }
+  };
 
-    joinBtn.onclick = () => {
-      const codeInput = prompt('Enter 6-digit room code:');
-      const code = codeInput ? codeInput.toUpperCase().trim() : '';
-    if (code) joinRoom(code);
-    };
-
-    closeBtn.onclick = () => {
-      modal.style.display = 'none';
-    };
-  }
+  closeBtn.onclick = () => {
+    modal.style.display = 'none';
+  };
+}
 
   // ====================== PWA + HELP ======================
   if ('serviceWorker' in navigator) {
@@ -1286,10 +1335,10 @@ function endPlayerTurn() {
 
 <!-- Multiplayer Lobby Modal -->
 <div id="multi-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.92); z-index: 30000; align-items: center; justify-content: center;">
-  <div style="background: #0b4a38; padding: 30px; border-radius: 20px; border: 6px solid #f0c14e; max-width: 420px; text-align: center; color: white;">
-    <h2 id="modal-title" style="color: #f0c14e;">Multiplayer</h2>
-    <div id="lobby-content">
-      <!-- Populated by createRoom / joinRoom -->
+  <div style="background: #0b4a38; padding: 30px; border-radius: 20px; border: 6px solid #f0c14e; max-width: 420px; text-align: center; color: white; width: 90%;">
+    <h2 id="modal-title" style="color: #f0c14e; margin-bottom: 20px;">Multiplayer</h2>
+    <div id="lobby-content" style="min-height: 160px;">
+      <!-- Dynamically filled by JS -->
     </div>
     <button id="close-multi" style="margin-top: 20px; padding: 10px 20px; background: #555; color: white; border: none; border-radius: 8px;">Close</button>
   </div>
