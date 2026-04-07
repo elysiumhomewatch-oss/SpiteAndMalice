@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-  <title>Spite • Durban Rules</title>
+  <title>Spite and Malice</title>
   
     <!-- PWA: Installable + Fullscreen -->
   <link rel="manifest" href="manifest.webmanifest">
@@ -11,7 +11,7 @@
   <meta name="mobile-web-app-capable" content="yes">           <!-- modern replacement -->
   <meta name="apple-mobile-web-app-capable" content="yes">     <!-- keep for older iOS -->
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Spite Durban">
+  <meta name="apple-mobile-web-app-title" content="Spite and Malice">
   <link rel="icon" href="data:;base64,iVBORw0KGgo=">
   
   <style>
@@ -293,7 +293,10 @@
   </div>
 </div>
 
-<button id="new-game">New Game</button>
+<div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+  <button id="new-game">New Game</button>
+  <button id="help-btn" style="background: #555; color: white;">Help ❔</button>
+</div>
 
 <!-- Streak Display -->
 <div id="streak-display" class="streak-display"></div>
@@ -1038,7 +1041,92 @@
     console.log('📲 App can be installed - ready for install prompt');
     // You can later add a visible Install button if you want
   });
+
+    // ====================== HELP MODAL ======================
+  function initHelpModal() {
+    const helpModal = document.getElementById('help-modal');
+    const helpBtn = document.getElementById('help-btn');
+    const closeHelp = document.getElementById('close-help');
+    const closeHelpBottom = document.getElementById('close-help-bottom');
+
+    if (!helpModal || !helpBtn) return; // Safety check
+
+    helpBtn.addEventListener('click', () => {
+      helpModal.style.display = 'block';
+    });
+
+    function closeHelpModal() {
+      helpModal.style.display = 'none';
+    }
+
+    closeHelp.addEventListener('click', closeHelpModal);
+    closeHelpBottom.addEventListener('click', closeHelpModal);
+
+    // Close when clicking outside content
+    helpModal.addEventListener('click', (e) => {
+      if (e.target === helpModal) closeHelpModal();
+    });
+  }
+
+  // Run after everything is loaded
+  window.addEventListener('load', initHelpModal);
   
 </script>
+
+  <!-- Help Modal -->
+<div id="help-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.92); z-index: 30000; overflow-y: auto;">
+  <div style="max-width: 620px; margin: 40px auto; background: #0b4a38; border: 6px solid #f0c14e; border-radius: 20px; padding: 25px; color: white; box-shadow: 0 0 40px rgba(240,193,78,0.6);">
+    
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+      <h2 style="margin: 0; color: #f0c14e;">Spite and Malice - How to Play</h2>
+      <button id="close-help" style="background: none; border: none; font-size: 28px; color: #f0c14e; cursor: pointer;">✕</button>
+    </div>
+
+    <div style="line-height: 1.6; font-size: 1.05rem;">
+      <h3 style="color: #f0c14e; margin-top: 0;">🎯 Objective</h3>
+      <p>Be the first player to empty your Payoff pile (13 cards). The faster you clear it, the more points you score.</p>
+
+      <h3 style="color: #f0c14e;">Basic Rules</h3>
+      <ul>
+        <li>Play cards to the 4 Center piles in ascending order (A → Q). Kings are wild.</li>
+        <li>You can play from your Hand, Payoff pile, or Side Stacks.</li>
+        <li>You may play as many cards as possible in one turn.</li>
+        <li>When you cannot or choose not to play anymore, discard **one** card from your hand to a Side Stack to end your turn.</li>
+        <li>If your hand reaches 0 cards during your turn, you immediately draw back up to 5 cards from the stock.</li>
+      </ul>
+
+      <h3 style="color: #f0c14e;">Scoring</h3>
+      <p>When someone empties their Payoff pile:</p>
+      <ul>
+        <li>+5 points for winning the hand</li>
+        <li>+1 point per card left in opponent's Payoff pile</li>
+        <li><strong>Streak Bonus</strong>: Extra points for playing multiple cards in one turn (higher if from Payoff pile)</li>
+      </ul>
+
+      <h3 style="color: #f0c14e;">Strategies & Tips</h3>
+      <ul>
+        <li>Prioritize playing from your Payoff pile whenever possible.</li>
+        <li>Save Kings for critical moments or long chains.</li>
+        <li>Watch your opponent's Payoff top card and try to block them (Spite!).</li>
+        <li>Keep your Side Stacks organized — don't bury useful cards too deep.</li>
+        <li>Long streaks = big points. Try to chain 4+ cards when possible.</li>
+      </ul>
+
+      <h3 style="color: #f0c14e;">Installing as an App (Recommended)</h3>
+      <p>On Android/Chrome: Tap the menu (⋮) → "Install app" or "Add to home screen".</p>
+      <p>On iPhone/Safari: Tap Share → "Add to Home Screen".</p>
+      <p>Once installed, the game runs in true fullscreen with no browser bars.</p>
+
+      <h3 style="color: #f0c14e;">Best Viewing Experience</h3>
+      <p>• Rotate your phone to Portrait mode for best layout.<br>
+         • Use "Add to Home Screen" for fullscreen experience.<br>
+         • Avoid zooming manually — the game is optimized for mobile.</p>
+    </div>
+
+    <button id="close-help-bottom" style="margin-top: 25px; width: 100%; padding: 14px; font-size: 1.2rem; background: #f0c14e; color: #222; border: none; border-radius: 12px; font-weight: bold;">
+      Close Help
+    </button>
+  </div>
+</div>
 </body>
 </html>
