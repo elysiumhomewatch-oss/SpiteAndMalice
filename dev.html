@@ -589,55 +589,49 @@ async function startPolling() {
   pollInterval = setInterval(async () => {
     if (!isMultiplayer || !roomCode) return;
 
-    // Only poll when we are waiting for opponent
-    if (currentPlayer === "player") {
-      isWaitingForOpponent = false;
-      return;                    // No polling on your turn
-    }
-
-    isWaitingForOpponent = true;
+    // Only poll when waiting for opponent
+    if (currentPlayer === "player") return;
 
     const timeSinceTurnEnd = Date.now() - turnEndTime;
 
-    // First 10 seconds after turn ends → no polling
+    // First 10 seconds: minimal polling
     if (timeSinceTurnEnd < 10000) {
       return;
     }
 
-    // After 10 seconds → poll every 5 seconds
-    const result = await callBackend('getState', { 
-      roomCode: roomCode, 
-      playerRole: myRole 
-    });
+    await pollOnce();
+  }, 1500);
+}
 
-    if (result.success && result.view) {
-      const v = result.view;
+async function pollOnce() {
+  if (!isMultiplayer || !roomCode) return;
 
-      if (v.version > lastSeenVersion || lastSeenVersion === 0) {
-        lastSeenVersion = v.version || 1;
+  const result = await callBackend('getState', { 
+    roomCode: roomCode, 
+    playerRole: myRole 
+  });
 
-        playerHand = v.myHand || [];
-        playerPayoff = v.myPayoff || [];
-        playerSides = v.mySides || [[],[],[],[]];
-        aiPayoff = v.opponentPayoff || [];
-        aiSides = v.opponentSides || [[],[],[],[]];
-        centers = v.centers || [[],[],[],[]];
-        currentPlayer = (v.myRole === v.currentPlayer) ? "player" : "ai";
+  if (result.success && result.view) {
+    const v = result.view;
 
-        if (v.opponentJoined && !opponentJoined) {
-          opponentJoined = true;
-          setStatus("🎉 Opponent has joined the room!", "#00ff88");
-        }
+    if (v.version > lastSeenVersion || lastSeenVersion === 0) {
+      lastSeenVersion = v.version || 1;
 
-        updateUI();
-          
-        updateTurnStatus();
+      playerHand = v.myHand || [];
+      playerPayoff = v.myPayoff || [];
+      playerSides = v.mySides || [[],[],[],[]];
+      aiPayoff = v.opponentPayoff || [];
+      aiSides = v.opponentSides || [[],[],[],[]];
+      centers = v.centers || [[],[],[],[]];
+      currentPlayer = (v.myRole === v.currentPlayer) ? "player" : "ai";
 
-        if (playerPayoff.length === 0) endHand("player");
-        else if (aiPayoff.length === 0) endHand("ai");
-      }
+      updateUI();
+      updateTurnStatus();
+
+      if (playerPayoff.length === 0) endHand("player");
+      else if (aiPayoff.length === 0) endHand("ai");
     }
-  }, 1000);   // Check every 1 second (but only act after 10s delay)
+  }
 }
 
  // ====================== ROOM PERSISTENCE ======================
@@ -993,14 +987,20 @@ function endPlayerTurn() {
   currentStreak = 0;
 
   if (isMultiplayer) {
-    currentPlayer = "ai";
-    turnEndTime = Date.now();           // ← Record when we started waiting
+    currentPlayer = "ai";           // local view: now waiting
+    turnEndTime = Date.now();
     updateUI();
     updateTurnStatus();
+    
+    // Force immediate poll after ending turn to push the change faster
+    setTimeout(() => {
+      if (isMultiplayer) pollOnce();
+    }, 800);
+    
     return;
   }
 
-  // Single-player logic (unchanged)
+  // Single player only
   while (playerHand.length < 5 && stock.length > 0) playerHand.push(stock.shift());
   updateUI();
   if (playerPayoff.length === 0) return;
