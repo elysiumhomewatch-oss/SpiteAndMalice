@@ -565,13 +565,26 @@ function startMultiplayerAfterCreate() {
   }
 
 function loadMultiplayerStateFromView(v) {
-  playerHand = v.myHand || [];
+  // Full reliable state restoration
+  playerHand   = v.myHand   || [];
   playerPayoff = v.myPayoff || [];
-  playerSides = v.mySides || [[],[],[],[]];
-  aiPayoff = v.opponentPayoff || [];
-  aiSides = v.opponentSides || [[],[],[],[]];
-  centers = v.centers || [[],[],[],[]];
+  playerSides  = v.mySides  || [[],[],[],[]];
+  
+  aiPayoff     = v.opponentPayoff || [];
+  aiSides      = v.opponentSides  || [[],[],[],[]];
+  
+  centers      = v.centers || [[],[],[],[]];
+  
+  // Important: we don't need stock on client for display, but we restore it if present
+  stock        = v.stock || [];
+  
   currentPlayer = (v.myRole === v.currentPlayer) ? "player" : "ai";
+  
+  // Reset local turn flags safely
+  selected = null;
+  hasPlayedThisTurn = false;
+  hasDiscardedThisTurn = false;
+  currentStreak = 0;
 }
   
 async function startPolling() {
@@ -660,11 +673,11 @@ async function tryReconnectToRoom() {
     roomCode = savedCode;
     myRole = savedRole;
     isMultiplayer = true;
-    opponentJoined = true;           // assume opponent is still there
-    lastSeenVersion = 0;
+    opponentJoined = true;
+    lastSeenVersion = result.view.version || 0;
     turnEndTime = Date.now();
 
-    loadMultiplayerStateFromView(result.view);   // we'll define this next
+    loadMultiplayerStateFromView(result.view);
 
     startPolling();
     updateUI();
@@ -672,12 +685,11 @@ async function tryReconnectToRoom() {
     setStatus("✅ Reconnected to room " + roomCode, "#00ff88");
     return true;
   } else {
-    setStatus("Could not reconnect – room may have expired.", "#ff6666");
+    setStatus("Could not reconnect – room may have expired or ended.", "#ff6666");
     clearCurrentRoom();
     return false;
   }
-} 
-
+}
   function stopPolling() {
     if (pollInterval) clearInterval(pollInterval);
     pollInterval = null;
