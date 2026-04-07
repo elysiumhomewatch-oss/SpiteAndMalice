@@ -13,8 +13,239 @@
   <link rel="icon" href="data:;base64,iVBORw0KGgo=">
 
   <style>
-    /* === SECTION A: PASTE YOUR FULL ORIGINAL STYLE BLOCK HERE === */
-    /* (copy everything that was inside the <style> tags in your dev.html) */
+    /* Your existing styles remain unchanged */
+    :root {
+      --felt: #0b4a38;
+      --dark-felt: #083728;
+      --gold: #f0c14e;
+      --gold-dark: #d4af37;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at center, #0b4a38 0%, #05261f 100%);
+      color: #fff;
+      margin: 0;
+      padding: 8px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      touch-action: manipulation;
+      overflow-x: hidden;
+    }
+
+    .table {
+      width: 100%;
+      max-width: 1100px;
+      background: var(--felt);
+      border: 18px solid #3c2f1e;
+      border-image: linear-gradient(#f0c14e, #b8972e) 1;
+      border-radius: 25px;
+      box-shadow: 0 0 40px rgba(0,0,0,0.8),
+                  inset 0 0 80px rgba(255,255,255,0.08);
+      padding: 15px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .table::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-radial-gradient(circle at 30% 40%, rgba(255,255,255,0.03) 0%, transparent 8%);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    h1 {
+      font-size: 2.1rem;
+      margin: 10px 0 8px;
+      color: var(--gold);
+      text-shadow: 0 3px 8px rgba(0,0,0,0.6);
+      text-align: center;
+      letter-spacing: 2px;
+    }
+
+    #status {
+      font-size: 1.35rem;
+      margin: 10px 0 15px;
+      text-align: center;
+      min-height: 1.8em;
+      font-weight: bold;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    }
+
+    .scoreboard {
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      margin: 8px 0 15px;
+      font-size: 1.1rem;
+      font-weight: bold;
+    }
+
+    .score-box {
+      background: rgba(0,0,0,0.4);
+      padding: 8px 20px;
+      border-radius: 12px;
+      border: 2px solid var(--gold);
+      text-align: center;
+    }
+
+    .section {
+      width: 100%;
+      max-width: 1000px;
+      margin: 12px 0;
+    }
+
+    h3 {
+      margin: 8px 0 10px;
+      text-align: center;
+      font-size: 1.15rem;
+      color: var(--gold);
+      text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+    }
+
+    .cards {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      justify-content: center;
+    }
+
+    .pile {
+      width: 92px;
+      height: 130px;
+      position: relative;
+      cursor: pointer;
+      z-index: 2;
+    }
+
+    .card {
+      width: 92px;
+      height: 130px;
+      border-radius: 12px;
+      border: 3px solid #444;
+      background: #fff;
+      color: #000;
+      font-size: 26px;
+      font-weight: bold;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      align-items: flex-start;
+      box-shadow: 0 6px 15px rgba(0,0,0,0.7);
+      user-select: none;
+      transition: all 0.15s;
+      padding: 7px;
+      box-sizing: border-box;
+      text-align: left;
+    }
+
+    .card.red { color: #c00; }
+    .card.black { color: #111; }
+
+    .card.back {
+      background: linear-gradient(135deg, #003366, #0066cc);
+      color: white;
+      font-size: 52px;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .card.empty {
+      background: #223322;
+      color: #aaa;
+      font-size: 14px;
+      border-color: #555;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .highlight {
+      border-color: #ff0 !important;
+      box-shadow: 0 0 30px #ff0 !important;
+      transform: scale(1.1) !important;
+    }
+
+    .start-highlight .card.empty {
+      background: #0f0 !important;
+      color: black !important;
+      border-color: #0f0 !important;
+      box-shadow: 0 0 35px #0f0 !important;
+    }
+
+    .gold-frame {
+      border: 4px solid var(--gold);
+      box-shadow: 0 0 15px rgba(240, 193, 78, 0.6);
+    }
+
+    .streak-display {
+      position: fixed;
+      top: 20%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.85);
+      color: var(--gold);
+      padding: 12px 28px;
+      border-radius: 50px;
+      font-size: 1.6rem;
+      font-weight: bold;
+      box-shadow: 0 0 30px rgba(240, 193, 78, 0.8);
+      z-index: 10000;
+      opacity: 0;
+      transition: all 0.4s;
+      pointer-events: none;
+      border: 3px solid var(--gold);
+    }
+
+    button {
+      width: 100%;
+      max-width: 360px;
+      margin: 20px auto;
+      padding: 16px;
+      font-size: 1.35rem;
+      font-weight: bold;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(#f0c14e, #d4af37);
+      color: #222;
+      box-shadow: 0 6px 15px rgba(0,0,0,0.5);
+    }
+
+    .results-screen {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.92);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 20000;
+      flex-direction: column;
+      color: white;
+    }
+
+    .results-content {
+      background: #0b4a38;
+      padding: 30px;
+      border-radius: 20px;
+      border: 6px solid var(--gold);
+      max-width: 420px;
+      text-align: center;
+      box-shadow: 0 0 50px rgba(240, 193, 78, 0.7);
+    }
+
+    #status {
+  font-size: 1.5rem !important;
+  min-height: 2.2em;
+  padding: 8px 16px;
+  border-radius: 12px;
+  background: rgba(0,0,0,0.4);
+  margin: 12px auto;
+  max-width: 420px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+}
   </style>
 </head>
 <body>
