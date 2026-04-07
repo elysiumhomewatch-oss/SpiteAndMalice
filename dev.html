@@ -561,16 +561,23 @@ function startMultiplayerAfterCreate() {
   }
 async function startPolling() {
   if (pollInterval) clearInterval(pollInterval);
+  
   pollInterval = setInterval(async () => {
     if (!isMultiplayer || !roomCode) return;
 
-    const result = await callBackend('getState', { roomCode: roomCode, playerRole: myRole });
+    const result = await callBackend('getState', { 
+      roomCode: roomCode, 
+      playerRole: myRole 
+    });
+
     if (result.success && result.view) {
       const v = result.view;
 
-      if (v.version > lastSeenVersion) {
-        lastSeenVersion = v.version;
+      // Always update if version increased OR if we haven't seen any version yet
+      if (v.version > lastSeenVersion || lastSeenVersion === 0) {
+        lastSeenVersion = v.version || 1;
 
+        // Update full state
         playerHand = v.myHand || [];
         playerPayoff = v.myPayoff || [];
         playerSides = v.mySides || [[],[],[],[]];
@@ -585,13 +592,13 @@ async function startPolling() {
         }
 
         updateUI();
-        updateTurnStatus();        // ← NEW: always refresh turn message
+        updateTurnStatus();
 
         if (playerPayoff.length === 0) endHand("player");
         else if (aiPayoff.length === 0) endHand("ai");
       }
     }
-  }, 1500);
+  }, 1200); // 1.2 seconds – faster polling for better reliability
 }
 
   function stopPolling() {
