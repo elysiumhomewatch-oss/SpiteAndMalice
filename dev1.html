@@ -332,17 +332,1163 @@ function stringToCard(str) {
   return { rank: rank, suit: suit, color: color };
 }
 
-// ====================== YOUR ORIGINAL GAME CONSTANTS & VARIABLES ======================
-// === SECTION D-1: PASTE ALL YOUR ORIGINAL SCRIPT CODE FROM HERE ===
-// (Everything from "var RANKS = ..." down to the end of your original script, 
-//  except the old createRoom/joinRoom/loadMultiplayerState/tryPlayToCenter/callBackend functions)
-// Keep all your scoring, streak, createDeck, shuffle, canPlayOn, aiTurn, updateUI, etc.
+ // ====================== GAME CONSTANTS ======================
+  var RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  var SUITS = ['♥','♦','♣','♠'];
+  var VALUE = {A:1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,J:11,Q:12,K:13};
+
+  // ====================== MULTIPLAYER BACKEND URL ======================
+  // REPLACE THIS WITH YOUR DEPLOYED GOOGLE APPS SCRIPT WEB APP URL
+  const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzqV0QOGuSQM-uadVJr73K5-I5tm7FDaituyoqEbTPMM0ISzIHtxhEjnE0CT1rJY6B3/exec';
+
+  // ====================== SCORING SYSTEM ======================
+  let playerTotalScore = 0;
+  let aiTotalScore = 0;
+  let currentStreak = 0;
+  let currentStreakFromPayoff = false;
+  let handStreakBonus = 0;
+
+  function getStreakPoints(length, isPayoff) {
+    if (length === 1) return isPayoff ? 2 : 1;
+    if (length === 2) return isPayoff ? 4 : 2;
+    if (length === 3) return isPayoff ? 6 : 3;
+    if (length === 4) return isPayoff ? 10 : 5;
+    return isPayoff ? 15 : 8; // 5+
+  }
+
+  function showStreak() {
+    const el = document.getElementById('streak-display');
+    let text = `Streak ×${currentStreak}`;
+    let color = currentStreakFromPayoff ? '#00ff88' : '#ffcc00';
+    
+    if (currentStreakFromPayoff) text += " 💰 PAYOFF RUSH!";
+    
+    el.textContent = text;
+    el.style.color = color;
+    el.style.opacity = '1';
+    el.style.transform = 'translate(-50%, -50%) scale(1.1)';
+    
+    setTimeout(() => {
+      el.style.opacity = '0';
+      el.style.transform = 'translate(-50%, -60%) scale(0.9)';
+    }, 1800);
+  }
+
+  // ====================== CORE GAME ======================
+  function createDeck() {
+    var deck = [];
+    for (var i = 0; i < 2; i++) 
+      for (var s = 0; s < SUITS.length; s++) 
+        for (var r = 0; r < RANKS.length; r++) {
+          var suit = SUITS[s], rank = RANKS[r];
+          deck.push({rank:rank, suit:suit, color:(suit==='♥'||suit==='♦')?'red':'black'});
+        }
+    return deck;
+  }
+
+  function shuffle(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var temp = arr[i]; arr[i] = arr[j]; arr[j] = temp;
+    }
+    return arr;
+  }
+
+  function topCard(pile) { return pile.length > 0 ? pile[pile.length-1] : null; }
+  function canStartCenter(c) { return c && (c.rank === 'A' || c.rank === 'K'); }
+
+  function canPlayOn(played, top) {
+    if (!top) return canStartCenter(played);
+    if (played.rank === 'K' || top.rank === 'K') return true;
+    return (VALUE[played.rank]||0) === (VALUE[top.rank]||0) + 1;
+  }
+
+  function getIntendedRank(played, top) {
+    if (played.rank !== 'K') return played.rank;
+    if (!top) return 'A';
+    var nextVal = VALUE[top.rank] + 1;
+    if (nextVal > 12) return 'Q';
+    return RANKS[nextVal - 1];
+  }
+
+  function cardDisplay(c) { return c ? c.rank + c.suit : ''; }
+
+  // Game state
+  var stock, playerPayoff = [], aiPayoff = [], playerHand = [], playerSides = [[],[],[],[]], 
+      aiHand = [], aiSides = [[],[],[],[]], centers = [[],[],[],[]], 
+      currentPlayer = "player", selected = null;
+  var hasPlayedThisTurn = false;
+  var hasDiscardedThisTurn = false;
+
+  // ====================== MULTIPLAYER GLOBALS ======================
+  let isMultiplayer = false;
+  let roomCode = null;
+  let myRole = null; // 'p1' or 'p2'
+  let pollInterval = null;
+  let opponentJoined = false;
+  let lastSeenVersion = 0;
+  let isWaitingForOpponent = false;
+  let turnEndTime = 0;
+
+  var statusEl = document.getElementById("status");
+  var newBtn = document.getElementById("new-game");
+
+  function setStatus(msg, color) {
+    statusEl.textContent = msg;
+    if (color) statusEl.style.color = color;
+  }
+
+  function updateScores() {
+    document.getElementById("player-total-score").textContent = playerTotalScore;
+    document.getElementById("ai-total-score").textContent = aiTotalScore;
+  }
+
+  // ====================== MULTIPLAYER HELPER FUNCTIONS ======================
+async function callBackend(action, extraParams = {}) {
+  const params = new URLSearchParams({ action, ...extraParams });
+  
+  try {
+    const response = await fetch(WEB_APP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString()
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (err) {
+    console.error('Backend call failed:', err);
+    return { 
+      success: false, 
+      error: 'Connection error. Please check your internet and try again.' 
+    };
+  }
+}
+
+async function createRoom() {
+  const modalTitle = document.getElementById('modal-title');
+  const content = document.getElementById('lobby-content');
+
+  // Show loading state
+  modalTitle.textContent = 'Creating Room...';
+  content.innerHTML = `
+    <div style="text-align:center; padding:40px 20px;">
+      <p style="font-size:1.3rem; margin-bottom:20px;">Please wait...</p>
+      <div style="width:50px; height:50px; border:6px solid #f0c14e; border-top-color:transparent; border-radius:50%; animation: spin 1s linear infinite; margin:0 auto;"></div>
+    </div>
+  `;
+
+  const result = await callBackend('create');
+
+  if (result.success) {
+    roomCode = result.roomCode;
+    myRole = 'p1';
+    isMultiplayer = true;
+    opponentJoined = false;           // ← NEW
+    lastSeenVersion = 0;              // ← NEW
+    loadMultiplayerState(result.state);
+    saveCurrentRoom();
+    // Show room code nicely
+    modalTitle.textContent = '🎉 Room Created!';
+    content.innerHTML = `
+      <p style="margin:10px 0 5px; font-size:1.1rem;">Share this code with your friend:</p>
+      <div style="background:#05261f; padding:15px; border-radius:12px; font-size:2.2rem; font-weight:bold; letter-spacing:8px; margin:15px 0; border:3px solid #f0c14e;" id="room-code-display">
+        ${roomCode}
+      </div>
+      <button onclick="copyRoomCode()" style="background:#f0c14e; color:#222; padding:12px 24px; border:none; border-radius:10px; font-size:1.2rem; font-weight:bold; margin:10px 0;">📋 Copy Code</button>
+      <p style="font-size:0.95rem; margin-top:15px; opacity:0.9;">Your friend should open the game and tap <strong>Join Room</strong>, then enter this code.</p>
+      <button onclick="startMultiplayerAfterCreate()" style="margin-top:20px; background:#00ff88; color:#222; padding:12px 30px; border:none; border-radius:10px; font-size:1.1rem; font-weight:bold;">I'm Ready – Start Playing</button>
+    `;
+    startPolling();
+    saveCurrentRoom();
+    setStatus(`Room ${roomCode} created – waiting for opponent`);
+  } else {
+    content.innerHTML = `<p style="color:#ff6666;">${result.error || 'Failed to create room'}</p>`;
+    modalTitle.textContent = 'Error';
+  }
+}
+
+ function copyRoomCode() {
+  const code = document.getElementById('room-code-display').textContent.trim();
+  navigator.clipboard.writeText(code).then(() => {
+    const btns = document.querySelectorAll('#lobby-content button');
+    for (let b of btns) {
+      if (b.textContent.includes('Copy')) {
+        const original = b.textContent;
+        b.textContent = '✅ Copied!';
+        setTimeout(() => { b.textContent = original; }, 2000);
+      }
+    }
+  });
+}
+
+function startMultiplayerAfterCreate() {
+  document.getElementById('multi-modal').style.display = 'none';
+  // Game is already loaded and polling started
+  updateUI();
+  setStatus(`Room ${roomCode} – waiting for opponent to join...`);
+} 
+
+  async function joinRoom(code) {
+    const result = await callBackend('join', { roomCode: code });
+    if (result.success) {
+      roomCode = code;
+      myRole = 'p2';
+      isMultiplayer = true;
+      opponentJoined = true;     // we are P2, so opponent is already here
+      lastSeenVersion = 0;
+      loadMultiplayerState(result.state);
+      saveCurrentRoom();
+      document.getElementById('multi-modal').style.display = 'none';
+      setStatus(`Joined room ${roomCode}`);
+      startPolling();
+      saveCurrentRoom();
+    } else {
+      alert(result.error || 'Failed to join room');
+    }
+  }
+
+  function loadMultiplayerState(fullState) {
+    // Map server state to local variables (p1 = YOU when myRole==='p1')
+    if (myRole === 'p1') {
+      playerHand = fullState.p1Hand || [];
+      playerPayoff = fullState.p1Payoff || [];
+      playerSides = fullState.p1Sides || [[],[],[],[]];
+      aiPayoff = fullState.p2Payoff || [];
+      aiSides = fullState.p2Sides || [[],[],[],[]];
+    } else {
+      playerHand = fullState.p2Hand || [];
+      playerPayoff = fullState.p2Payoff || [];
+      playerSides = fullState.p2Sides || [[],[],[],[]];
+      aiPayoff = fullState.p1Payoff || [];
+      aiSides = fullState.p1Sides || [[],[],[],[]];
+    }
+    centers = fullState.centers || [[],[],[],[]];
+    stock = fullState.stock || [];
+    currentPlayer = (myRole === fullState.currentPlayer) ? "player" : "ai";
+    updateUI();
+  }
+
+function loadMultiplayerStateFromView(v) {
+  playerHand   = v.myHand || [];
+  playerPayoff = v.myPayoff || [];
+  playerSides  = v.mySides || [[],[],[],[]];
+  aiPayoff     = v.opponentPayoff || [];
+  aiSides      = v.opponentSides || [[],[],[],[]];
+  centers      = v.centers || [[],[],[],[]];
+  currentPlayer = (v.myRole === v.currentPlayer) ? "player" : "ai";
+}
+  
+async function startPolling() {
+  if (pollInterval) clearInterval(pollInterval);
+
+  pollInterval = setInterval(async () => {
+    if (!isMultiplayer || !roomCode) return;
+
+    // Only poll when waiting for opponent
+    if (currentPlayer === "player") return;
+
+    const timeSinceTurnEnd = Date.now() - turnEndTime;
+
+    // First 10 seconds: minimal polling
+    if (timeSinceTurnEnd < 10000) {
+      return;
+    }
+
+    await pollOnce();
+  }, 1500);
+}
+
+async function pollOnce() {
+  if (!isMultiplayer || !roomCode) return;
+
+  const result = await callBackend('getState', { 
+    roomCode: roomCode, 
+    playerRole: myRole 
+  });
+
+  if (result.success && result.view) {
+    const v = result.view;
+
+    if (v.version > lastSeenVersion || lastSeenVersion === 0) {
+      lastSeenVersion = v.version || 1;
+
+      playerHand = v.myHand || [];
+      playerPayoff = v.myPayoff || [];
+      playerSides = v.mySides || [[],[],[],[]];
+      aiPayoff = v.opponentPayoff || [];
+      aiSides = v.opponentSides || [[],[],[],[]];
+      centers = v.centers || [[],[],[],[]];
+      currentPlayer = (v.myRole === v.currentPlayer) ? "player" : "ai";
+
+      updateUI();
+      updateTurnStatus();
+
+      if (playerPayoff.length === 0) endHand("player");
+      else if (aiPayoff.length === 0) endHand("ai");
+    }
+  }
+}
+
+ // ====================== ROOM PERSISTENCE ======================
+// Save only room info
+function saveCurrentRoom() {
+  if (isMultiplayer && roomCode && myRole) {
+    localStorage.setItem('spiteRoomCode', roomCode);
+    localStorage.setItem('spiteMyRole', myRole);
+  }
+}
+
+function clearCurrentRoom() {
+  localStorage.removeItem('spiteRoomCode');
+  localStorage.removeItem('spiteMyRole');
+}
+
+// Reconnect / refresh loads full state from server
+async function tryReconnectToRoom() {
+  const savedCode = localStorage.getItem('spiteRoomCode');
+  const savedRole = localStorage.getItem('spiteMyRole');
+
+  if (!savedCode || !savedRole) return false;
+
+  setStatus("Loading game from server...", "#ffaa00");
+
+  const result = await callBackend('getState', { 
+    roomCode: savedCode, 
+    playerRole: savedRole 
+  });
+
+  if (result.success && result.view) {
+    roomCode = savedCode;
+    myRole = savedRole;
+    isMultiplayer = true;
+    opponentJoined = true;
+    lastSeenVersion = result.view.version || 0;
+    turnEndTime = Date.now();
+
+    loadMultiplayerStateFromView(result.view);
+
+    startPolling();
+    updateUI();
+    updateTurnStatus();
+    setStatus(`Reconnected to room ${roomCode}`, "#00ff88");
+    return true;
+  } else {
+    setStatus("Room no longer available.", "#ff6666");
+    clearCurrentRoom();
+    return false;
+  }
+}
+  function stopPolling() {
+    if (pollInterval) clearInterval(pollInterval);
+    pollInterval = null;
+  }
+
+  function updateUI() {
+    document.getElementById("player-payoff").textContent = playerPayoff.length;
+    document.getElementById("ai-payoff").textContent = aiPayoff.length;
+
+    // Player Payoff
+    var playerPayoffDiv = document.getElementById("player-payoff-pile");
+    playerPayoffDiv.innerHTML = '';
+    var pp = topCard(playerPayoff);
+    var ppCard = document.createElement("div");
+    ppCard.className = pp ? "card " + pp.color : "card empty";
+    ppCard.textContent = pp ? cardDisplay(pp) : "WIN!";
+    if (pp) {
+      ppCard.onclick = () => selectCard("payoff");
+      if (selected === "payoff") ppCard.classList.add("highlight");
+    }
+    playerPayoffDiv.appendChild(ppCard);
+
+    // AI Payoff
+    var aiPayoffDiv = document.getElementById("ai-payoff-pile");
+    aiPayoffDiv.innerHTML = '';
+    var ap = topCard(aiPayoff);
+    var apCard = document.createElement("div");
+    apCard.className = ap ? "card " + ap.color : "card empty";
+    apCard.textContent = ap ? cardDisplay(ap) : "DONE";
+    aiPayoffDiv.appendChild(apCard);
+
+    // Centers
+    var centersDiv = document.getElementById("centers"); 
+    centersDiv.innerHTML = '';
+    for (var i = 0; i < 4; i++) {
+      var t = topCard(centers[i]);
+      var pileEl = document.createElement("div"); 
+      pileEl.className = "pile";
+      var cardEl = document.createElement("div");
+      cardEl.className = t ? "card " + t.color : "card empty";
+      cardEl.textContent = t ? cardDisplay(t) : "A/K";
+      pileEl.appendChild(cardEl);
+      pileEl.onclick = ((idx) => () => tryPlayToCenter(idx))(i);
+      
+      var selCard = null;
+      if (selected) {
+        var parts = selected.split('-');
+        selCard = parts[0] === "hand" ? playerHand[parseInt(parts[1])] : 
+                  parts[0] === "payoff" ? topCard(playerPayoff) : topCard(playerSides[parseInt(parts[1])]);
+      }
+      if (selCard && canPlayOn(selCard, t)) {
+        if (!t) pileEl.classList.add("start-highlight");
+        else cardEl.classList.add("highlight");
+      }
+      centersDiv.appendChild(pileEl);
+    }
+
+    // Player Hand
+    var handDiv = document.getElementById("player-hand"); 
+    handDiv.innerHTML = '';
+    for (var i = 0; i < playerHand.length; i++) {
+      var c = playerHand[i];
+      var cd = document.createElement("div");
+      cd.className = "card " + c.color;
+      cd.textContent = cardDisplay(c);
+      cd.onclick = ((idx) => () => selectCard("hand", idx))(i);
+      if (selected === "hand-" + i) cd.classList.add("highlight");
+      handDiv.appendChild(cd);
+    }
+
+    // Player Sides
+    var sidesDiv = document.getElementById("player-sides"); 
+    sidesDiv.innerHTML = '';
+    var canDiscard = selected && selected.startsWith("hand-") && !hasDiscardedThisTurn;
+    for (var i = 0; i < 4; i++) {
+      var pile = playerSides[i];
+      var p = document.createElement("div"); 
+      p.className = "pile";
+      var t = topCard(pile);
+      var inner = document.createElement("div");
+      if (t) {
+        inner.className = "card " + t.color;
+        inner.textContent = cardDisplay(t);
+        inner.onclick = (function(idx) {
+          return function(e) {
+            if (canDiscard) return;
+            e.stopPropagation();
+            selectCard("side", idx);
+          };
+        })(i);
+        p.appendChild(inner);
+      } else {
+        inner.className = "card empty";
+        inner.textContent = "-";
+        p.appendChild(inner);
+      }
+      if (canDiscard) p.classList.add("highlight");
+      p.onclick = ((idx) => () => { if (canDiscard) discardToSide(idx); })(i);
+      sidesDiv.appendChild(p);
+    }
+
+    // AI Sides & Hand (visual only – hand shows fixed backs for now)
+    var aiSidesDiv = document.getElementById("ai-sides"); 
+    aiSidesDiv.innerHTML = '';
+    for (var i = 0; i < 4; i++) {
+      var pile = aiSides[i];
+      var p = document.createElement("div"); 
+      p.className = "pile";
+      var t = topCard(pile);
+      var inner = document.createElement("div");
+      inner.className = t ? "card " + t.color : "card empty";
+      inner.textContent = t ? cardDisplay(t) : "-";
+      p.appendChild(inner);
+      aiSidesDiv.appendChild(p);
+    }
+
+    var aiHandDiv = document.getElementById("ai-hand"); 
+    aiHandDiv.innerHTML = '';
+    for (var i = 0; i < 5; i++) {  // fixed 5 backs (opponent hand size hidden for simplicity)
+      var back = document.createElement("div");
+      back.className = "card back";
+      back.textContent = "🃏";
+      aiHandDiv.appendChild(back);
+    }
+      updateTurnStatus();   // keep the turn banner always up-to-date
+      
+  }
+
+function updateTurnStatus() {
+  const indicator = document.getElementById('turn-indicator');
+  if (!isMultiplayer) {
+    indicator.style.display = 'none';
+    return;
+  }
+
+  indicator.style.display = 'block';
+
+  if (currentPlayer === "player") {
+    indicator.innerHTML = `✅ <span style="color:#00ff88;">YOUR TURN</span> – Play cards to centers, then discard to end turn`;
+    indicator.style.background = 'rgba(0, 255, 136, 0.15)';
+    indicator.style.color = '#00ff88';
+    indicator.style.border = '3px solid #00ff88';
+  } else {
+    indicator.innerHTML = `⏳ <span style="color:#ffaa00;">OPPONENT'S TURN</span> – Waiting for them to play...`;
+    indicator.style.background = 'rgba(255, 170, 0, 0.15)';
+    indicator.style.color = '#ffaa00';
+    indicator.style.border = '3px solid #ffaa00';
+  }
+}
+
+  function selectCard(type, idx) {
+    if (currentPlayer !== "player") return;
+    if (selected === type + "-" + idx) {
+      selected = null;
+      updateUI();
+      setStatus("Selection cancelled");
+      return;
+    }
+    selected = type + "-" + idx;
+    updateUI();
+    setStatus(type === "hand" ? "Tap center or side stack" : "Tap center pile to play");
+  }
+
+function discardToSide(sideIdx) {
+  if (currentPlayer !== "player" || !selected || !selected.startsWith("hand-") || hasDiscardedThisTurn) return;
+
+  var handIdx = parseInt(selected.split('-')[1]);
+  var card = playerHand[handIdx];
+
+  playerSides[sideIdx].push(card);
+  playerHand.splice(handIdx, 1);
+  hasDiscardedThisTurn = true;
+  selected = null;
+
+  updateUI();
+  setStatus("Saving full turn to server...");
+
+  if (isMultiplayer) {
+    callBackend('endTurn', {
+      roomCode: roomCode,
+      playerRole: myRole,
+      centers: JSON.stringify(centers),
+      mySides: JSON.stringify(playerSides),
+      myHand: JSON.stringify(playerHand),
+      myPayoff: JSON.stringify(playerPayoff),
+      stock: JSON.stringify(stock)
+    }).then(result => {
+      if (result.success) {
+        setStatus("Turn completed successfully", "#00ff88");
+      } else {
+        setStatus(result.error || "Server error", "#ff6666");
+      }
+    });
+  }
+
+  endPlayerTurn();
+}
+
+  // ====================== MULTIPLAYER OVERRIDE: tryPlayToCenter ======================
+  
+  
+async function tryPlayToCenter(i) {
+  if (currentPlayer !== "player" || !selected) return;
+
+  var parts = selected.split('-');
+  var type = parts[0], idx = parseInt(parts[1]);
+  var card = type === "hand" ? playerHand[idx] : 
+             type === "payoff" ? topCard(playerPayoff) : topCard(playerSides[idx]);
+
+  if (!card || !canPlayOn(card, topCard(centers[i]))) {
+    setStatus("Illegal move", "#ff6666");
+    return;
+  }
+
+  // === PURE OPTIMISTIC LOCAL UPDATE ONLY ===
+  var intendedRank = getIntendedRank(card, topCard(centers[i]));
+  var cardCopy = { rank: intendedRank, suit: card.suit, color: card.color };
+
+  // Animation
+  var sourceEl = null;
+  if (type === "hand") sourceEl = document.querySelectorAll("#player-hand .card")[idx];
+  else if (type === "payoff") sourceEl = document.getElementById("player-payoff-pile").querySelector(".card");
+  else sourceEl = document.querySelectorAll("#player-sides .pile")[idx].querySelector(".card");
+
+  var targetPileEl = document.querySelectorAll("#centers .pile")[i];
+  if (sourceEl && targetPileEl) animateCardPlay(sourceEl, cardCopy, targetPileEl);
+
+  // Remove card from source
+  if (type === "hand") playerHand.splice(idx, 1);
+  else if (type === "payoff") playerPayoff.pop();
+  else playerSides[idx].pop();
+
+  // Add to center
+  centers[i].push(cardCopy);
+
+  // Clear center if Q or full
+  if (intendedRank === 'Q' || centers[i].length >= 13) {
+    stock = stock.concat(centers[i]);
+    shuffle(stock);
+    centers[i] = [];
+  }
+
+  // Auto-refill hand if empty
+  // Multiplayer: let the SERVER do the refill at endTurn (prevents duplication)
+  if (playerHand.length === 0) {
+    if (!isMultiplayer) {
+      while (playerHand.length < 5 && stock.length > 0) {
+        playerHand.push(stock.shift());
+      }
+    } else {
+      // In multiplayer we just leave the hand short for now.
+      // The server will top it up to 5 cards at the end of the turn.
+      // (still fully legal — player just can't play the new cards this exact turn)
+    }
+  }
+  // Streak
+  currentStreak++;
+  currentStreakFromPayoff = (type === "payoff");
+  const points = getStreakPoints(currentStreak, currentStreakFromPayoff);
+  handStreakBonus += points;
+  showStreak();
+
+  hasPlayedThisTurn = true;
+  selected = null;
+
+  updateUI();
+  setStatus(`Played ${cardDisplay(cardCopy)} (+${points})`);
+
+  if (playerPayoff.length === 0) {
+    if (isMultiplayer) {
+      // ← NEW: Send the FINAL move to server before ending hand
+      setStatus("Saving final move & ending hand...");
+      callBackend('endHand', {
+        roomCode: roomCode,
+        playerRole: myRole,
+        centers: JSON.stringify(centers),
+        mySides: JSON.stringify(playerSides),
+        myHand: JSON.stringify(playerHand),
+        myPayoff: JSON.stringify(playerPayoff),
+        stock: JSON.stringify(stock)
+      }).then(result => {
+        if (!result.success) {
+          console.error("endHand failed:", result.error);
+        }
+      });
+    }
+    endHand("player");   // this will show results screen + clear local room
+    return;
+  }
+
+  // NO server call here — we only save when the turn ends (on discard)
+}
+
+  function animateCardPlay(sourceEl, card, targetPileEl) {
+    if (!sourceEl || !targetPileEl) return;
+    var rectSource = sourceEl.getBoundingClientRect();
+    var rectTarget = targetPileEl.getBoundingClientRect();
+
+    var flying = document.createElement("div");
+    flying.className = "card " + card.color;
+    flying.textContent = cardDisplay(card);
+    flying.style.position = "fixed";
+    flying.style.left = rectSource.left + "px";
+    flying.style.top = rectSource.top + "px";
+    flying.style.width = "92px";
+    flying.style.height = "130px";
+    flying.style.zIndex = "10000";
+    flying.style.pointerEvents = "none";
+    document.body.appendChild(flying);
+
+    setTimeout(() => {
+      flying.style.transition = "all 0.65s cubic-bezier(0.25, 0.1, 0.25, 1)";
+      flying.style.left = (rectTarget.left + 8) + "px";
+      flying.style.top = (rectTarget.top + 8) + "px";
+      flying.style.transform = "scale(0.85) rotate(15deg)";
+    }, 20);
+
+    setTimeout(() => flying.remove(), 700);
+  }
+
+function endPlayerTurn() {
+  selected = null;
+  hasPlayedThisTurn = false;
+  hasDiscardedThisTurn = false;
+  currentStreak = 0;
+
+  if (isMultiplayer) {
+    currentPlayer = "ai";           // local view: now waiting
+    turnEndTime = Date.now();
+    updateUI();
+    updateTurnStatus();
+    
+    // Force immediate poll after ending turn to push the change faster
+    setTimeout(() => {
+      if (isMultiplayer) pollOnce();
+    }, 800);
+    
+    return;
+  }
+
+  // Single player only
+  while (playerHand.length < 5 && stock.length > 0) playerHand.push(stock.shift());
+  updateUI();
+  if (playerPayoff.length === 0) return;
+  currentPlayer = "ai";
+  setStatus("AI thinking...");
+  setTimeout(aiTurn, 600);
+}
+
+  // ====================== SMART AI LOGIC (unchanged for single-player) ======================
+  // (your existing aiTurn, getNextNeededForPayoff, wouldHelpPlayer, aiCanPlay, aiPlayCard, etc. remain exactly as they were)
+  function getNextNeededForPayoff(payoffPile) {
+    var top = topCard(payoffPile);
+    if (!top || top.rank === 'K') return null;
+    var val = VALUE[top.rank];
+    if (val >= 13) return null;
+    return RANKS[val];
+  }
+
+  function getPlayerPayoffTop() {
+    return topCard(playerPayoff);
+  }
+
+  function wouldHelpPlayer(card, centerIdx) {
+    var playerTop = getPlayerPayoffTop();
+    if (!playerTop) return false;
+    var topOnCenter = topCard(centers[centerIdx]);
+    var intended = getIntendedRank(card, topOnCenter);
+    if (intended === 'K') return false;
+    var nextAfterIntended = RANKS[VALUE[intended]];
+    return nextAfterIntended === playerTop.rank;
+  }
+
+  function aiCanPlay(card, centerIdx) {
+    return canPlayOn(card, topCard(centers[centerIdx]));
+  }
+
+  function aiPlayCard(sourceType, sourceIndex, centerIdx) {
+    // your original aiPlayCard code (unchanged)
+    var card;
+    if (sourceType === "payoff") card = topCard(aiPayoff);
+    else if (sourceType === "hand") card = aiHand[sourceIndex];
+    else if (sourceType === "side") card = topCard(aiSides[sourceIndex]);
+
+    if (!card || !aiCanPlay(card, centerIdx)) return false;
+
+    var intendedRank = getIntendedRank(card, topCard(centers[centerIdx]));
+    var cardCopy = { rank: intendedRank, suit: card.suit, color: card.color };
+
+    var sourceEl = null;
+    if (sourceType === "payoff") {
+      sourceEl = document.getElementById("ai-payoff-pile").querySelector(".card");
+    } else if (sourceType === "hand") {
+      sourceEl = document.querySelectorAll("#ai-hand .card")[sourceIndex];
+    } else if (sourceType === "side") {
+      sourceEl = document.querySelectorAll("#ai-sides .pile")[sourceIndex].querySelector(".card");
+    }
+
+    var targetPileEl = document.querySelectorAll("#centers .pile")[centerIdx];
+
+    if (sourceEl && targetPileEl) {
+      animateCardPlay(sourceEl, cardCopy, targetPileEl);
+    }
+
+    if (sourceType === "payoff") aiPayoff.pop();
+    else if (sourceType === "hand") aiHand.splice(sourceIndex, 1);
+    else if (sourceType === "side") aiSides[sourceIndex].pop();
+
+    centers[centerIdx].push(cardCopy);
+
+    if (intendedRank === 'Q' || centers[centerIdx].length >= 13) {
+      stock = stock.concat(centers[centerIdx]);
+      shuffle(stock);
+      centers[centerIdx] = [];
+    }
+
+    updateUI();
+    setStatus("AI played " + cardDisplay(cardCopy));
+    return true;
+  }
+
+  function aiTurn() {
+    if (isMultiplayer) return; // multiplayer uses polling instead
+    // your original aiTurn code continues here unchanged...
+    let played = false;
+    let loopSafety = 0;
+
+    while (aiPayoff.length > 0 && loopSafety < 20) {
+      loopSafety++;
+      let tp = topCard(aiPayoff);
+      let playedThisLoop = false;
+      for (let i = 0; i < 4; i++) {
+        if (aiCanPlay(tp, i)) {
+          if (aiPlayCard("payoff", 0, i)) {
+            played = true;
+            playedThisLoop = true;
+            break;
+          }
+        }
+      }
+      if (!playedThisLoop) break;
+    }
+
+    // ... (rest of your original aiTurn logic remains exactly the same)
+    if (!played) {
+      for (let h = 0; h < aiHand.length; h++) {
+        let card = aiHand[h];
+        if (card.rank === 'A') {
+          for (let j = 0; j < 4; j++) {
+            if (!topCard(centers[j])) {
+              if (aiPlayCard("hand", h, j)) {
+                played = true;
+                break;
+              }
+            }
+          }
+          if (played) break;
+        }
+      }
+    }
+
+    if (!played) {
+      for (let s = 0; s < 4; s++) {
+        let card = topCard(aiSides[s]);
+        if (card && card.rank === 'A') {
+          for (let j = 0; j < 4; j++) {
+            if (!topCard(centers[j])) {
+              if (aiPlayCard("side", s, j)) {
+                played = true;
+                break;
+              }
+            }
+          }
+          if (played) break;
+        }
+      }
+    }
+
+    let needed = getNextNeededForPayoff(aiPayoff);
+    if (needed) {
+      for (let h = 0; h < aiHand.length; h++) {
+        let card = aiHand[h];
+        if (card.rank === needed || card.rank === 'K') {
+          for (let j = 0; j < 4; j++) {
+            if (aiCanPlay(card, j) && !wouldHelpPlayer(card, j)) {
+              if (aiPlayCard("hand", h, j)) {
+                played = true;
+                break;
+              }
+            }
+          }
+          if (played) break;
+        }
+      }
+      if (!played) {
+        for (let s = 0; s < 4; s++) {
+          let card = topCard(aiSides[s]);
+          if (card && (card.rank === needed || card.rank === 'K')) {
+            for (let j = 0; j < 4; j++) {
+              if (aiCanPlay(card, j) && !wouldHelpPlayer(card, j)) {
+                if (aiPlayCard("side", s, j)) {
+                  played = true;
+                  break;
+                }
+              }
+            }
+            if (played) break;
+          }
+        }
+      }
+    }
+
+    if (!played && aiHand.length > 0) {
+      for (let h = 0; h < aiHand.length; h++) {
+        let card = aiHand[h];
+        for (let j = 0; j < 4; j++) {
+          if (aiCanPlay(card, j) && !wouldHelpPlayer(card, j)) {
+            if (aiPlayCard("hand", h, j)) {
+              played = true;
+              break;
+            }
+          }
+        }
+        if (played) break;
+      }
+    }
+
+    if (!played) {
+      for (let s = 0; s < 4; s++) {
+        let card = topCard(aiSides[s]);
+        if (card) {
+          for (let j = 0; j < 4; j++) {
+            if (aiCanPlay(card, j) && !wouldHelpPlayer(card, j)) {
+              if (aiPlayCard("side", s, j)) {
+                played = true;
+                break;
+              }
+            }
+          }
+          if (played) break;
+        }
+      }
+    }
+
+    if (!played && aiHand.length > 0) {
+      for (let h = 0; h < aiHand.length; h++) {
+        let card = aiHand[h];
+        for (let j = 0; j < 4; j++) {
+          if (aiCanPlay(card, j)) {
+            if (aiPlayCard("hand", h, j)) {
+              played = true;
+              break;
+            }
+          }
+        }
+        if (played) break;
+      }
+    }
+
+    if (aiHand.length === 0) {
+      while (aiHand.length < 5 && stock.length > 0) {
+        aiHand.push(stock.shift());
+      }
+    }
+
+    updateUI();
+
+    if (aiHand.length > 0) {
+      let playerNeeded = getNextNeededForPayoff(playerPayoff);
+      let discardCandidates = aiHand.filter(c => {
+        return !playerNeeded || (c.rank !== playerNeeded && c.rank !== 'K');
+      });
+      let discardCard = discardCandidates.length > 0 ? discardCandidates[0] : aiHand[0];
+      let discardIndex = aiHand.indexOf(discardCard);
+
+      let bestSide = 0;
+      let bestScore = -999;
+      for (let s = 0; s < 4; s++) {
+        let top = topCard(aiSides[s]);
+        let score = top ? (VALUE[top.rank] || 0) : 20;
+        if (score > bestScore) {
+          bestScore = score;
+          bestSide = s;
+        }
+      }
+
+      aiSides[bestSide].push(discardCard);
+      aiHand.splice(discardIndex, 1);
+
+      updateUI();
+      setStatus("AI discarded to side stack");
+    }
+
+    if (aiPayoff.length === 0) {
+      endHand("ai");
+      return;
+    }
+
+    currentPlayer = "player";
+    currentStreak = 0;
+    setStatus("Your turn – play as many as you can!");
+  }
+
+function endHand(winner) {
+  let basePoints = 5;
+  let remainingBonus = winner === "player" ? aiPayoff.length : playerPayoff.length;
+  let totalHandScore = basePoints + remainingBonus + handStreakBonus;
+
+  if (winner === "player") {
+    playerTotalScore += totalHandScore;
+  } else {
+    aiTotalScore += totalHandScore;
+  }
+
+  updateScores();
+
+  const isWinner = winner === "player";
+  showResultsScreen(isWinner, basePoints, remainingBonus, handStreakBonus, totalHandScore);
+
+  handStreakBonus = 0;
+
+  if (isMultiplayer) {
+    // Clean up room on both devices + server
+    clearCurrentRoom();
+    //callBackend('cleanupRoom', { roomCode: roomCode });
+    stopPolling();
+    isMultiplayer = false;
+    roomCode = null;
+    myRole = null;
+  }
+}
+
+function showResultsScreen(isWinner, base, remaining, streakBonus, total) {
+  const screen = document.getElementById('results-screen');
+  const title = document.getElementById('result-title');
+  const details = document.getElementById('result-details');
+
+  if (isWinner) {
+    title.textContent = "🎉 YOU WIN THE HAND!";
+    title.style.color = "#00ff88";
+  } else {
+    title.textContent = "😔 You lost the hand";
+    title.style.color = "#ff6666";
+  }
+
+  details.innerHTML = `
+    <p><strong>Hand Win Bonus:</strong> +${base}</p>
+    <p><strong>Opponent Cards Left:</strong> +${remaining}</p>
+    <p><strong>Streak Combo Bonus:</strong> +${streakBonus}</p>
+    <hr style="border-color:#555">
+    <p style="font-size:1.4rem"><strong>Total This Hand: ${total} points</strong></p>
+    <p style="margin-top:15px">Your Total: ${playerTotalScore}  AI Total: ${aiTotalScore}</p>
+    ${!isWinner ? '<p style="color:#ffaa00; margin-top:10px;">Better luck next hand!</p>' : ''}
+  `;
+
+  screen.style.display = 'flex';
+}
+
+  document.getElementById('continue-btn').onclick = () => {
+    document.getElementById('results-screen').style.display = 'none';
+    startGame();
+  };
+
+function startGame() {
+  // Clear any old single-player state
+  if (isMultiplayer) {
+    stopPolling();
+    clearCurrentRoom();
+  }
+
+  // First try to reconnect to a previous multiplayer room
+  if (localStorage.getItem('spiteRoomCode')) {
+    tryReconnectToRoom().then(reconnected => {
+      if (reconnected) return;   // successfully reconnected
+      // If reconnect failed, fall through to normal new game
+      initNewSinglePlayerGame();
+    });
+    return;
+  }
+
+  // Normal single-player start
+  initNewSinglePlayerGame();
+}
+
+function initNewSinglePlayerGame() {
+  stock = shuffle(createDeck());
+  playerPayoff = stock.splice(0,13);
+  aiPayoff = stock.splice(0,13);
+  playerHand = stock.splice(0,5);
+  aiHand = stock.splice(0,5);
+  playerSides = [[],[],[],[]];
+  aiSides = [[],[],[],[]];
+  centers = [[],[],[],[]];
+
+  selected = null;
+  hasPlayedThisTurn = false;
+  hasDiscardedThisTurn = false;
+  currentStreak = 0;
+  handStreakBonus = 0;
+
+  currentPlayer = playerHand.some(canStartCenter) ? "player" : "ai";
+  updateUI();
+  updateScores();
+  setStatus(currentPlayer === "player" ? "Your turn – play as many as you can!" : "AI starts...");
+
+  if (currentPlayer === "ai" && !isMultiplayer) setTimeout(aiTurn, 800);
+}
+
+  // Load saved scores
+  if (localStorage.getItem('spitePlayerScore')) {
+    playerTotalScore = parseInt(localStorage.getItem('spitePlayerScore'));
+    aiTotalScore = parseInt(localStorage.getItem('spiteAiScore'));
+    updateScores();
+  }
+
+  const saveScores = () => {
+    localStorage.setItem('spitePlayerScore', playerTotalScore);
+    localStorage.setItem('spiteAiScore', aiTotalScore);
+  };
+
+  const originalUpdateScores = updateScores;
+  updateScores = () => {
+    originalUpdateScores();
+    saveScores();
+  };
+
+  // ====================== MULTIPLAYER MODAL & BUTTONS ======================
+function initMultiplayerModal() {
+  const modal = document.getElementById('multi-modal');
+  const createBtn = document.getElementById('multi-create-btn');
+  const joinBtn = document.getElementById('multi-join-btn');
+  const closeBtn = document.getElementById('close-multi');
+
+  createBtn.onclick = async () => {
+    modal.style.display = 'flex';
+    createRoom();   // this will now handle loading + showing the code inside the modal
+  };
+
+  joinBtn.onclick = () => {
+    const codeInput = prompt('Enter 6-digit room code:');
+    const code = codeInput ? codeInput.toUpperCase().trim() : '';
+    if (code) {
+      modal.style.display = 'flex';
+      joinRoom(code);
+    }
+  };
+
+  closeBtn.onclick = () => {
+    modal.style.display = 'none';
+  };
+}
+
+  // ====================== PWA + HELP ======================
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js', { scope: './' })
+        .then(reg => {
+          console.log('✅ Service Worker registered successfully', reg);
+        })
+        .catch(err => {
+          console.error('❌ Service Worker registration failed:', err);
+        });
+    });
+  }
+
+  let deferredPrompt;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    console.log('📲 App can be installed - ready for install prompt');
+  });
+
+  function initHelpModal() {
+    const helpModal = document.getElementById('help-modal');
+    const helpBtn = document.getElementById('help-btn');
+    const closeHelp = document.getElementById('close-help');
+    const closeHelpBottom = document.getElementById('close-help-bottom');
+
+    if (!helpModal || !helpBtn) return;
+
+    helpBtn.addEventListener('click', () => {
+      helpModal.style.display = 'block';
+    });
+
+    function closeHelpModal() {
+      helpModal.style.display = 'none';
+    }
+
+    closeHelp.addEventListener('click', closeHelpModal);
+    closeHelpBottom.addEventListener('click', closeHelpModal);
+
+    helpModal.addEventListener('click', (e) => {
+      if (e.target === helpModal) closeHelpModal();
+    });
+  }
+
+  // Run after everything is loaded
+  window.addEventListener('load', () => {
+    initHelpModal();
+    initMultiplayerModal();
+    newBtn.onclick = startGame;
+    startGame();
+  });
+
 
 const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzqV0QOGuSQM-uadVJr73K5-I5tm7FDaituyoqEbTPMM0ISzIHtxhEjnE0CT1rJY6B3/exec';
-
-// ====================== UPDATED MULTIPLAYER FUNCTIONS (replace the old ones) ======================
-
-// Paste the following 6 functions exactly (they replace the old versions)
 
 async function callBackend(action, extraParams = {}) {
   const params = new URLSearchParams({ action, ...extraParams });
