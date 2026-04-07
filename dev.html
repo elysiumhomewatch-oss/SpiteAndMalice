@@ -491,7 +491,7 @@ async function createRoom() {
     opponentJoined = false;           // ← NEW
     lastSeenVersion = 0;              // ← NEW
     loadMultiplayerState(result.state);
-
+    saveCurrentRoom();
     // Show room code nicely
     modalTitle.textContent = '🎉 Room Created!';
     content.innerHTML = `
@@ -542,6 +542,7 @@ function startMultiplayerAfterCreate() {
       opponentJoined = true;     // we are P2, so opponent is already here
       lastSeenVersion = 0;
       loadMultiplayerState(result.state);
+      saveCurrentRoom();
       document.getElementById('multi-modal').style.display = 'none';
       setStatus(`Joined room ${roomCode}`);
       startPolling();
@@ -573,27 +574,13 @@ function startMultiplayerAfterCreate() {
   }
 
 function loadMultiplayerStateFromView(v) {
-  // Full reliable state restoration
-  playerHand   = v.myHand   || [];
+  playerHand   = v.myHand || [];
   playerPayoff = v.myPayoff || [];
-  playerSides  = v.mySides  || [[],[],[],[]];
-  
+  playerSides  = v.mySides || [[],[],[],[]];
   aiPayoff     = v.opponentPayoff || [];
-  aiSides      = v.opponentSides  || [[],[],[],[]];
-  
+  aiSides      = v.opponentSides || [[],[],[],[]];
   centers      = v.centers || [[],[],[],[]];
-  
-  // Important: we don't need stock on client for display, but we restore it if present
-  stock        = v.stock || [];
-  
   currentPlayer = (v.myRole === v.currentPlayer) ? "player" : "ai";
-    updateTurnStatus();
-  
-  // Reset local turn flags safely
-  selected = null;
-  hasPlayedThisTurn = false;
-  hasDiscardedThisTurn = false;
-  currentStreak = 0;
 }
   
 async function startPolling() {
@@ -654,6 +641,7 @@ async function startPolling() {
 }
 
  // ====================== ROOM PERSISTENCE ======================
+// Save only room info
 function saveCurrentRoom() {
   if (isMultiplayer && roomCode && myRole) {
     localStorage.setItem('spiteRoomCode', roomCode);
@@ -666,13 +654,14 @@ function clearCurrentRoom() {
   localStorage.removeItem('spiteMyRole');
 }
 
+// Reconnect / refresh loads full state from server
 async function tryReconnectToRoom() {
   const savedCode = localStorage.getItem('spiteRoomCode');
   const savedRole = localStorage.getItem('spiteMyRole');
 
   if (!savedCode || !savedRole) return false;
 
-  setStatus("Reconnecting to previous room...", "#ffaa00");
+  setStatus("Loading game from server...", "#ffaa00");
 
   const result = await callBackend('getState', { 
     roomCode: savedCode, 
@@ -692,10 +681,10 @@ async function tryReconnectToRoom() {
     startPolling();
     updateUI();
     updateTurnStatus();
-    setStatus("✅ Reconnected to room " + roomCode, "#00ff88");
+    setStatus(`Reconnected to room ${roomCode}`, "#00ff88");
     return true;
   } else {
-    setStatus("Could not reconnect – room may have expired or ended.", "#ff6666");
+    setStatus("Room no longer available.", "#ff6666");
     clearCurrentRoom();
     return false;
   }
@@ -869,33 +858,25 @@ function discardToSide(sideIdx) {
   var handIdx = parseInt(selected.split('-')[1]);
   var card = playerHand[handIdx];
 
-  // Optimistic local update
   playerSides[sideIdx].push(card);
   playerHand.splice(handIdx, 1);
   hasDiscardedThisTurn = true;
   selected = null;
 
   updateUI();
-  setStatus("Discarded to side stack – ending turn");
+  setStatus("Ending turn... sending to server");
 
   if (isMultiplayer) {
-    // Send the COMPLETE current state to the server (only once per turn)
     callBackend('endTurn', {
       roomCode: roomCode,
       playerRole: myRole,
-      sideIdx: sideIdx,
-      handIdx: handIdx,
-      // Send full local state so server becomes authoritative
-      fullState: {
-        myHand: playerHand,
-        myPayoff: playerPayoff,
-        mySides: playerSides,
-        centers: centers,
-        stock: stock
-      }
+      centers: centers,
+      mySides: playerSides,
+      myHand: playerHand,
+      myPayoff: playerPayoff
     }).then(result => {
       if (!result.success) {
-        setStatus(result.error || "Failed to end turn", "#ff6666");
+        setStatus(result.error || "Failed to save turn", "#ff6666");
       }
     });
   }
@@ -919,7 +900,7 @@ async function tryPlayToCenter(i) {
     return;
   }
 
-  // === OPTIMISTIC UPDATE ONLY (no server call yet) ===
+  // Pure optimistic local update
   var intendedRank = getIntendedRank(card, topCard(centers[i]));
   var cardCopy = { rank: intendedRank, suit: card.suit, color: card.color };
 
@@ -931,7 +912,6 @@ async function tryPlayToCenter(i) {
   var targetPileEl = document.querySelectorAll("#centers .pile")[i];
   if (sourceEl && targetPileEl) animateCardPlay(sourceEl, cardCopy, targetPileEl);
 
-  // Remove card locally
   if (type === "hand") playerHand.splice(idx, 1);
   else if (type === "payoff") playerPayoff.pop();
   else playerSides[idx].pop();
@@ -944,7 +924,6 @@ async function tryPlayToCenter(i) {
     centers[i] = [];
   }
 
-  // Hand refill (local)
   if (playerHand.length === 0) {
     while (playerHand.length < 5 && stock.length > 0) {
       playerHand.push(stock.shift());
@@ -965,10 +944,7 @@ async function tryPlayToCenter(i) {
 
   if (playerPayoff.length === 0) {
     endHand("player");
-    return;
   }
-
-  // NO server call here anymore — we send everything only on discard
 }
 
   function animateCardPlay(sourceEl, card, targetPileEl) {
