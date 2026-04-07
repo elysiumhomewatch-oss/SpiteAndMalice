@@ -858,14 +858,13 @@ function discardToSide(sideIdx) {
   var handIdx = parseInt(selected.split('-')[1]);
   var card = playerHand[handIdx];
 
-  // Local optimistic update
   playerSides[sideIdx].push(card);
   playerHand.splice(handIdx, 1);
   hasDiscardedThisTurn = true;
   selected = null;
 
   updateUI();
-  setStatus("Ending turn — saving to server...");
+  setStatus("Saving full turn to server...");
 
   if (isMultiplayer) {
     callBackend('endTurn', {
@@ -875,16 +874,13 @@ function discardToSide(sideIdx) {
       mySides: JSON.stringify(playerSides),
       myHand: JSON.stringify(playerHand),
       myPayoff: JSON.stringify(playerPayoff),
-      stock: JSON.stringify(stock)        // ←←← ADD THIS LINE
+      stock: JSON.stringify(stock)
     }).then(result => {
       if (result.success) {
-        setStatus("Turn completed", "#00ff88");
+        setStatus("Turn completed successfully", "#00ff88");
       } else {
-        setStatus(result.error || "Failed to save turn", "#ff6666");
+        setStatus(result.error || "Server error", "#ff6666");
       }
-    }).catch(err => {
-      console.error(err);
-      setStatus("Connection error", "#ff6666");
     });
   }
 
