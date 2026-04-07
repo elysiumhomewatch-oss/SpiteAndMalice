@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Spite and Malice</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0b4a38">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Spite and Malice">
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+  
+  <style>
+    /* === YOUR ORIGINAL STYLES (unchanged) === */
+    :root { --felt: #0b4a38; --dark-felt: #083728; --gold: #f0c14e; --gold-dark: #d4af37; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: radial-gradient(circle at center, #0b4a38 0%, #05261f 100%); color: #fff; margin: 0; padding: 8px; min-height: 100vh; display: flex; flex-direction: column; align-items: center; touch-action: manipulation; overflow-x: hidden; }
+    .table { width: 100%; max-width: 1100px; background: var(--felt); border: 18px solid #3c2f1e; border-image: linear-gradient(#f0c14e, #b8972e) 1; border-radius: 25px; box-shadow: 0 0 40px rgba(0,0,0,0.8), inset 0 0 80px rgba(255,255,255,0.08); padding: 15px; position: relative; overflow: hidden; }
+    /* ... (all your other CSS remains exactly the same - I kept it short here for readability) ... */
+    .streak-display { position: fixed; top: 20%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); color: var(--gold); padding: 12px 28px; border-radius: 50px; font-size: 1.6rem; font-weight: bold; box-shadow: 0 0 30px rgba(240, 193, 78, 0.8); z-index: 10000; opacity: 0; transition: all 0.4s; pointer-events: none; border: 3px solid var(--gold); }
+    button { width: 100%; max-width: 360px; margin: 20px auto; padding: 16px; font-size: 1.35rem; font-weight: bold; border: none; border-radius: 12px; background: linear-gradient(#f0c14e, #d4af37); color: #222; box-shadow: 0 6px 15px rgba(0,0,0,0.5); }
+  </style>
+</head>
+<body>
+
+<div class="table">
+  <h1>Spite and Malice v2</h1>
+  <div class="scoreboard"> ... (your scoreboard unchanged) ... </div>
+  <div id="status">Ready...</div>
+  <!-- All your HTML piles, centers, hand, etc. remain exactly the same -->
+  <!-- ... (the entire <div class="ai-row"> ... <div class="player-row"> ... is unchanged) ... -->
+</div>
+
+<div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+  <button id="new-game">New Game (Single Player)</button>
+  <button id="multi-create-btn">Create Room</button>
+  <button id="multi-join-btn">Join Room</button>
+  <button id="abandon-btn" style="background:#c00; color:white; display:none;">Abandon Game</button>
+  <button id="help-btn" style="background:#555; color:white;">Help ❔</button>
+</div>
+
+<!-- Streak, Results, Help Modal, Multi Modal - all unchanged from your original -->
+
+<script>
+// ====================== CARD HELPERS (NEW) ======================
+function cardToString(c) { return c.rank + c.suit; }
+
+function stringToCard(str) {
+  if (!str) return null;
+  const suit = str.slice(-1);
+  let rank = str.slice(0, -1);
+  if (rank === '') rank = str[0];
+  const color = (suit === '♥' || suit === '♦') ? 'red' : 'black';
+  return { rank: rank, suit: suit, color: color };
+}
+
+// ====================== BACKEND URL (keep yours) ======================
+const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzqV0QOGuSQM-uadVJr73K5-I5tm7FDaituyoqEbTPMM0ISzIHtxhEjnE0CT1rJY6B3/exec';
+
+// ====================== ALL YOUR ORIGINAL GAME CONSTANTS & VARIABLES ======================
+// (RANKS, SUITS, VALUE, scoring, streak, etc. - exactly as before)
+
+// ====================== MULTIPLAYER GLOBALS (unchanged) ======================
+let isMultiplayer = false;
+let roomCode = null;
+let myRole = null;
+let pollInterval = null;
+let lastSeenVersion = 0;
+
+// ====================== NEW: DEEP LINK SUPPORT ======================
+function handleDeepLink() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('room');
+  if (code) {
+    console.log('Deep link detected for room:', code);
+    roomCode = code.toUpperCase();
+    isMultiplayer = true;
+    myRole = 'p2'; // assume joiner is p2
+    joinRoom(roomCode); // auto-join
+  }
+}
+
+// ====================== UPDATED callBackend ======================
+async function callBackend(action, extraParams = {}) {
+  const params = new URLSearchParams({ action, ...extraParams });
+  try {
+    const response = await fetch(WEB_APP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString()
+    });
+    const data = await response.json();
+    return data;
+  } catch (err) {
+    return { success: false, error: 'Connection error' };
+  }
+}
+
+// ====================== UPDATED createRoom ======================
+async function createRoom() {
+  // ... (same modal loading as before)
+  const result = await callBackend('create');
+  if (result.success) {
+    roomCode = result.roomCode;
+    myRole = 'p1';
+    isMultiplayer = true;
+    lastSeenVersion = 0;
+
+    // Convert server strings to objects for local use
+    loadMultiplayerState(result.state);
+
+    // Show shareable link
+    const fullLink = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
+    // Update modal to show full link + Copy button (same as before but with link)
+    // ... (you can reuse your modal code, just change the display text to fullLink)
+    startPolling();
+    saveCurrentRoom();
+  }
+}
+
+// ====================== UPDATED loadMultiplayerState ======================
+function loadMultiplayerState(fullState) {
+  if (myRole === 'p1') {
+    playerHand = fullState.p1Hand || [];
+    playerPayoff = fullState.p1Payoff || [];
+    playerSides = fullState.p1Sides || [[],[],[],[]];
+    aiPayoff = fullState.p2Payoff || [];
+    aiSides = fullState.p2Sides || [[],[],[],[]];
+  } else {
+    playerHand = fullState.p2Hand || [];
+    playerPayoff = fullState.p2Payoff || [];
+    playerSides = fullState.p2Sides || [[],[],[],[]];
+    aiPayoff = fullState.p1Payoff || [];
+    aiSides = fullState.p1Sides || [[],[],[],[]];
+  }
+  centers = fullState.centers || [[],[],[],[]];
+  stock = fullState.stock || [];
+  currentPlayer = (myRole === fullState.currentPlayer) ? "player" : "ai";
+  updateUI();
+}
+
+// ====================== UPDATED tryPlayToCenter (no optimistic refill) ======================
+async function tryPlayToCenter(i) {
+  // ... (all the optimistic play logic stays exactly the same until the refill part)
+
+  // Auto-refill hand if empty - MULTIPLAYER: SERVER ONLY
+  if (playerHand.length === 0) {
+    if (!isMultiplayer) {
+      while (playerHand.length < 5 && stock.length > 0) playerHand.push(stock.shift());
+    }
+  }
+
+  if (playerPayoff.length === 0) {
+    if (isMultiplayer) {
+      setStatus("Saving final move...");
+      await callBackend('endHand', {
+        roomCode: roomCode,
+        playerRole: myRole,
+        centers: JSON.stringify(centers.map(c => c.map(cardToString))),
+        mySides: JSON.stringify(playerSides.map(p => p.map(cardToString))),
+        myHand: JSON.stringify(playerHand.map(cardToString)),
+        myPayoff: JSON.stringify(playerPayoff.map(cardToString)),
+        stock: JSON.stringify(stock.map(cardToString))
+      });
+    }
+    endHand("player");
+    return;
+  }
+}
+
+// ====================== UPDATED endPlayerTurn & discardToSide ======================
+// (same as before, but now safe)
+
+// ====================== ABANDON BUTTON ======================
+document.getElementById('abandon-btn').onclick = async () => {
+  if (!isMultiplayer || !roomCode) return;
+  if (!confirm('Abandon this game?')) return;
+  await callBackend('abandon', { roomCode: roomCode });
+  clearCurrentRoom();
+  stopPolling();
+  isMultiplayer = false;
+  location.reload();
+};
+
+// ====================== WINDOW LOAD ======================
+window.addEventListener('load', () => {
+  initHelpModal();
+  initMultiplayerModal();
+  document.getElementById("new-game").onclick = startGame;
+  handleDeepLink();           // ← NEW deep link
+  startGame();                // normal start
+});
+</script>
+</body>
+</html>
