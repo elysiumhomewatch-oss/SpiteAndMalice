@@ -419,6 +419,8 @@
   let pollInterval = null;
   let opponentJoined = false;
   let lastSeenVersion = 0;
+  let isWaitingForOpponent = false;
+  let turnEndTime = 0;
 
   var statusEl = document.getElementById("status");
   var newBtn = document.getElementById("new-game");
@@ -559,12 +561,29 @@ function startMultiplayerAfterCreate() {
     currentPlayer = (myRole === fullState.currentPlayer) ? "player" : "ai";
     updateUI();
   }
+  
 async function startPolling() {
   if (pollInterval) clearInterval(pollInterval);
-  
+
   pollInterval = setInterval(async () => {
     if (!isMultiplayer || !roomCode) return;
 
+    // Only poll when we are waiting for opponent
+    if (currentPlayer === "player") {
+      isWaitingForOpponent = false;
+      return;                    // No polling on your turn
+    }
+
+    isWaitingForOpponent = true;
+
+    const timeSinceTurnEnd = Date.now() - turnEndTime;
+
+    // First 10 seconds after turn ends → no polling
+    if (timeSinceTurnEnd < 10000) {
+      return;
+    }
+
+    // After 10 seconds → poll every 5 seconds
     const result = await callBackend('getState', { 
       roomCode: roomCode, 
       playerRole: myRole 
@@ -573,11 +592,9 @@ async function startPolling() {
     if (result.success && result.view) {
       const v = result.view;
 
-      // Always update if version increased OR if we haven't seen any version yet
       if (v.version > lastSeenVersion || lastSeenVersion === 0) {
         lastSeenVersion = v.version || 1;
 
-        // Update full state
         playerHand = v.myHand || [];
         playerPayoff = v.myPayoff || [];
         playerSides = v.mySides || [[],[],[],[]];
@@ -598,7 +615,7 @@ async function startPolling() {
         else if (aiPayoff.length === 0) endHand("ai");
       }
     }
-  }, 1200); // 1.2 seconds – faster polling for better reliability
+  }, 1000);   // Check every 1 second (but only act after 10s delay)
 }
 
   function stopPolling() {
@@ -735,7 +752,7 @@ function updateTurnStatus() {
     setStatus("✅ YOUR TURN – play as many cards as you can, then discard to end turn", "#00ff88");
     statusEl.style.fontSize = "1.45rem";
   } else {
-    setStatus("⏳ Opponent is thinking...", "#ffaa00");
+    setStatus("⏳ Opponent is thinking... (updates every 5s after 10 seconds)", "#ffaa00");
     statusEl.style.fontSize = "1.35rem";
   }
 }
@@ -899,13 +916,14 @@ function endPlayerTurn() {
   currentStreak = 0;
 
   if (isMultiplayer) {
-    currentPlayer = "ai";                    // local player has finished turn
+    currentPlayer = "ai";
+    turnEndTime = Date.now();           // ← Record when we started waiting
     updateUI();
-    updateTurnStatus();                      // immediately shows "Opponent is thinking..."
+    updateTurnStatus();
     return;
   }
 
-  // Single-player only
+  // Single-player logic (unchanged)
   while (playerHand.length < 5 && stock.length > 0) playerHand.push(stock.shift());
   updateUI();
   if (playerPayoff.length === 0) return;
