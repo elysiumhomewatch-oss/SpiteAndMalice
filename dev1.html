@@ -11,25 +11,20 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Spite and Malice">
   <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-  
+
   <style>
-    /* === YOUR ORIGINAL STYLES (unchanged) === */
-    :root { --felt: #0b4a38; --dark-felt: #083728; --gold: #f0c14e; --gold-dark: #d4af37; }
-    body { font-family: system-ui, -apple-system, sans-serif; background: radial-gradient(circle at center, #0b4a38 0%, #05261f 100%); color: #fff; margin: 0; padding: 8px; min-height: 100vh; display: flex; flex-direction: column; align-items: center; touch-action: manipulation; overflow-x: hidden; }
-    .table { width: 100%; max-width: 1100px; background: var(--felt); border: 18px solid #3c2f1e; border-image: linear-gradient(#f0c14e, #b8972e) 1; border-radius: 25px; box-shadow: 0 0 40px rgba(0,0,0,0.8), inset 0 0 80px rgba(255,255,255,0.08); padding: 15px; position: relative; overflow: hidden; }
-    /* ... (all your other CSS remains exactly the same - I kept it short here for readability) ... */
-    .streak-display { position: fixed; top: 20%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); color: var(--gold); padding: 12px 28px; border-radius: 50px; font-size: 1.6rem; font-weight: bold; box-shadow: 0 0 30px rgba(240, 193, 78, 0.8); z-index: 10000; opacity: 0; transition: all 0.4s; pointer-events: none; border: 3px solid var(--gold); }
-    button { width: 100%; max-width: 360px; margin: 20px auto; padding: 16px; font-size: 1.35rem; font-weight: bold; border: none; border-radius: 12px; background: linear-gradient(#f0c14e, #d4af37); color: #222; box-shadow: 0 6px 15px rgba(0,0,0,0.5); }
+    /* === SECTION A: PASTE YOUR FULL ORIGINAL STYLE BLOCK HERE === */
+    /* (copy everything that was inside the <style> tags in your dev.html) */
   </style>
 </head>
 <body>
 
 <div class="table">
   <h1>Spite and Malice v2</h1>
-  <div class="scoreboard"> ... (your scoreboard unchanged) ... </div>
-  <div id="status">Ready...</div>
-  <!-- All your HTML piles, centers, hand, etc. remain exactly the same -->
-  <!-- ... (the entire <div class="ai-row"> ... <div class="player-row"> ... is unchanged) ... -->
+  
+  <!-- === SECTION B: PASTE YOUR FULL ORIGINAL TABLE CONTENT HERE === -->
+  <!-- From <div class="scoreboard"> all the way to the end of the player-row div -->
+  <!-- IMPORTANT: Remove the duplicate <div class="section"> and second <div id="centers"> you had before -->
 </div>
 
 <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
@@ -40,10 +35,11 @@
   <button id="help-btn" style="background:#555; color:white;">Help ❔</button>
 </div>
 
-<!-- Streak, Results, Help Modal, Multi Modal - all unchanged from your original -->
+<!-- === SECTION C: PASTE YOUR MODALS AND DISPLAYS HERE === -->
+<!-- Streak display, results-screen, help-modal, multi-modal (exactly as in your original dev.html) -->
 
 <script>
-// ====================== CARD HELPERS (NEW) ======================
+// ====================== NEW CARD HELPERS ======================
 function cardToString(c) { return c.rank + c.suit; }
 
 function stringToCard(str) {
@@ -55,33 +51,18 @@ function stringToCard(str) {
   return { rank: rank, suit: suit, color: color };
 }
 
-// ====================== BACKEND URL (keep yours) ======================
+// ====================== YOUR ORIGINAL GAME CONSTANTS & VARIABLES ======================
+// === SECTION D-1: PASTE ALL YOUR ORIGINAL SCRIPT CODE FROM HERE ===
+// (Everything from "var RANKS = ..." down to the end of your original script, 
+//  except the old createRoom/joinRoom/loadMultiplayerState/tryPlayToCenter/callBackend functions)
+// Keep all your scoring, streak, createDeck, shuffle, canPlayOn, aiTurn, updateUI, etc.
+
 const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzqV0QOGuSQM-uadVJr73K5-I5tm7FDaituyoqEbTPMM0ISzIHtxhEjnE0CT1rJY6B3/exec';
 
-// ====================== ALL YOUR ORIGINAL GAME CONSTANTS & VARIABLES ======================
-// (RANKS, SUITS, VALUE, scoring, streak, etc. - exactly as before)
+// ====================== UPDATED MULTIPLAYER FUNCTIONS (replace the old ones) ======================
 
-// ====================== MULTIPLAYER GLOBALS (unchanged) ======================
-let isMultiplayer = false;
-let roomCode = null;
-let myRole = null;
-let pollInterval = null;
-let lastSeenVersion = 0;
+// Paste the following 6 functions exactly (they replace the old versions)
 
-// ====================== NEW: DEEP LINK SUPPORT ======================
-function handleDeepLink() {
-  const params = new URLSearchParams(window.location.search);
-  const code = params.get('room');
-  if (code) {
-    console.log('Deep link detected for room:', code);
-    roomCode = code.toUpperCase();
-    isMultiplayer = true;
-    myRole = 'p2'; // assume joiner is p2
-    joinRoom(roomCode); // auto-join
-  }
-}
-
-// ====================== UPDATED callBackend ======================
 async function callBackend(action, extraParams = {}) {
   const params = new URLSearchParams({ action, ...extraParams });
   try {
@@ -90,36 +71,83 @@ async function callBackend(action, extraParams = {}) {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params.toString()
     });
+    if (!response.ok) throw new Error('HTTP error');
     const data = await response.json();
     return data;
   } catch (err) {
-    return { success: false, error: 'Connection error' };
+    console.error(err);
+    return { success: false, error: 'Connection error. Please try again.' };
   }
 }
 
-// ====================== UPDATED createRoom ======================
 async function createRoom() {
-  // ... (same modal loading as before)
+  const modalTitle = document.getElementById('modal-title');
+  const content = document.getElementById('lobby-content');
+  modalTitle.textContent = 'Creating Room...';
+  content.innerHTML = `<div style="text-align:center;padding:40px 20px;"><p style="font-size:1.3rem;">Please wait...</p><div style="width:50px;height:50px;border:6px solid #f0c14e;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto;"></div></div>`;
+
   const result = await callBackend('create');
   if (result.success) {
     roomCode = result.roomCode;
     myRole = 'p1';
     isMultiplayer = true;
     lastSeenVersion = 0;
-
-    // Convert server strings to objects for local use
-    loadMultiplayerState(result.state);
-
-    // Show shareable link
-    const fullLink = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
-    // Update modal to show full link + Copy button (same as before but with link)
-    // ... (you can reuse your modal code, just change the display text to fullLink)
-    startPolling();
+    loadMultiplayerState(result.state);   // uses new string→object conversion
     saveCurrentRoom();
+
+    const fullLink = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
+    modalTitle.textContent = '🎉 Room Created!';
+    content.innerHTML = `
+      <p style="margin:10px 0 5px;font-size:1.1rem;">Share this link with your friend:</p>
+      <div style="background:#05261f;padding:15px;border-radius:12px;font-size:1.4rem;font-weight:bold;margin:15px 0;border:3px solid #f0c14e;" id="room-link-display">${fullLink}</div>
+      <button onclick="copyRoomLink()" style="background:#f0c14e;color:#222;padding:12px 24px;border:none;border-radius:10px;font-size:1.2rem;font-weight:bold;margin:10px 0;">📋 Copy Link</button>
+      <p style="font-size:0.95rem;margin-top:15px;opacity:0.9;">Your friend just needs to tap the link (works even if they don't have the app installed yet).</p>
+      <button onclick="startMultiplayerAfterCreate()" style="margin-top:20px;background:#00ff88;color:#222;padding:12px 30px;border:none;border-radius:10px;font-size:1.1rem;font-weight:bold;">I'm Ready – Start Playing</button>
+    `;
+    startPolling();
+    setStatus(`Room ${roomCode} created – waiting for opponent`);
+  } else {
+    content.innerHTML = `<p style="color:#ff6666;">${result.error || 'Failed to create room'}</p>`;
+    modalTitle.textContent = 'Error';
   }
 }
 
-// ====================== UPDATED loadMultiplayerState ======================
+function copyRoomLink() {
+  const link = document.getElementById('room-link-display').textContent.trim();
+  navigator.clipboard.writeText(link).then(() => {
+    const btn = document.querySelector('#lobby-content button');
+    if (btn) {
+      const original = btn.textContent;
+      btn.textContent = '✅ Copied!';
+      setTimeout(() => btn.textContent = original, 2000);
+    }
+  });
+}
+
+function startMultiplayerAfterCreate() {
+  document.getElementById('multi-modal').style.display = 'none';
+  updateUI();
+  setStatus(`Room ${roomCode} – waiting for opponent to join...`);
+}
+
+async function joinRoom(code) {
+  const result = await callBackend('join', { roomCode: code });
+  if (result.success) {
+    roomCode = code;
+    myRole = 'p2';
+    isMultiplayer = true;
+    lastSeenVersion = 0;
+    loadMultiplayerState(result.state);
+    saveCurrentRoom();
+    document.getElementById('multi-modal').style.display = 'none';
+    setStatus(`Joined room ${roomCode}`);
+    startPolling();
+  } else {
+    alert(result.error || 'Failed to join room');
+  }
+}
+
+// Updated loadMultiplayerState (handles string cards)
 function loadMultiplayerState(fullState) {
   if (myRole === 'p1') {
     playerHand = fullState.p1Hand || [];
@@ -140,20 +168,70 @@ function loadMultiplayerState(fullState) {
   updateUI();
 }
 
-// ====================== UPDATED tryPlayToCenter (no optimistic refill) ======================
+// Updated tryPlayToCenter (no optimistic refill + endHand call)
 async function tryPlayToCenter(i) {
-  // ... (all the optimistic play logic stays exactly the same until the refill part)
+  if (currentPlayer !== "player" || !selected) return;
+
+  var parts = selected.split('-');
+  var type = parts[0], idx = parseInt(parts[1]);
+  var card = type === "hand" ? playerHand[idx] : 
+             type === "payoff" ? topCard(playerPayoff) : topCard(playerSides[idx]);
+
+  if (!card || !canPlayOn(card, topCard(centers[i]))) {
+    setStatus("Illegal move", "#ff6666");
+    return;
+  }
+
+  var intendedRank = getIntendedRank(card, topCard(centers[i]));
+  var cardCopy = { rank: intendedRank, suit: card.suit, color: card.color };
+
+  // Animation (same as before)
+  var sourceEl = null;
+  if (type === "hand") sourceEl = document.querySelectorAll("#player-hand .card")[idx];
+  else if (type === "payoff") sourceEl = document.getElementById("player-payoff-pile").querySelector(".card");
+  else sourceEl = document.querySelectorAll("#player-sides .pile")[idx].querySelector(".card");
+
+  var targetPileEl = document.querySelectorAll("#centers .pile")[i];
+  if (sourceEl && targetPileEl) animateCardPlay(sourceEl, cardCopy, targetPileEl);
+
+  // Remove from source
+  if (type === "hand") playerHand.splice(idx, 1);
+  else if (type === "payoff") playerPayoff.pop();
+  else playerSides[idx].pop();
+
+  // Add to center
+  centers[i].push(cardCopy);
+
+  if (intendedRank === 'Q' || centers[i].length >= 13) {
+    stock = stock.concat(centers[i]);
+    shuffle(stock);
+    centers[i] = [];
+  }
+
+  currentStreak++;
+  currentStreakFromPayoff = (type === "payoff");
+  const points = getStreakPoints(currentStreak, currentStreakFromPayoff);
+  handStreakBonus += points;
+  showStreak();
+
+  hasPlayedThisTurn = true;
+  selected = null;
+
+  updateUI();
+  setStatus(`Played ${cardDisplay(cardCopy)} (+${points})`);
 
   // Auto-refill hand if empty - MULTIPLAYER: SERVER ONLY
   if (playerHand.length === 0) {
     if (!isMultiplayer) {
-      while (playerHand.length < 5 && stock.length > 0) playerHand.push(stock.shift());
+      while (playerHand.length < 5 && stock.length > 0) {
+        playerHand.push(stock.shift());
+      }
     }
   }
 
   if (playerPayoff.length === 0) {
     if (isMultiplayer) {
-      setStatus("Saving final move...");
+      setStatus("Saving final move & ending hand...");
       await callBackend('endHand', {
         roomCode: roomCode,
         playerRole: myRole,
@@ -169,27 +247,37 @@ async function tryPlayToCenter(i) {
   }
 }
 
-// ====================== UPDATED endPlayerTurn & discardToSide ======================
-// (same as before, but now safe)
-
-// ====================== ABANDON BUTTON ======================
+// ====================== ABANDON BUTTON & DEEP LINK (add at the very end of script) ======================
 document.getElementById('abandon-btn').onclick = async () => {
   if (!isMultiplayer || !roomCode) return;
-  if (!confirm('Abandon this game?')) return;
+  if (!confirm('Abandon this game? Room will be deleted.')) return;
   await callBackend('abandon', { roomCode: roomCode });
   clearCurrentRoom();
   stopPolling();
   isMultiplayer = false;
+  roomCode = null;
+  myRole = null;
   location.reload();
 };
 
-// ====================== WINDOW LOAD ======================
+function handleDeepLink() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('room');
+  if (code) {
+    roomCode = code.toUpperCase();
+    isMultiplayer = true;
+    myRole = 'p2';
+    joinRoom(roomCode);
+  }
+}
+
+// ====================== WINDOW LOAD (replace your old load listener) ======================
 window.addEventListener('load', () => {
   initHelpModal();
   initMultiplayerModal();
   document.getElementById("new-game").onclick = startGame;
-  handleDeepLink();           // ← NEW deep link
-  startGame();                // normal start
+  handleDeepLink();           // NEW deep link support
+  startGame();
 });
 </script>
 </body>
