@@ -496,6 +496,7 @@ async function createRoom() {
       <button onclick="startMultiplayerAfterCreate()" style="margin-top:20px; background:#00ff88; color:#222; padding:12px 30px; border:none; border-radius:10px; font-size:1.1rem; font-weight:bold;">I'm Ready – Start Playing</button>
     `;
     startPolling();
+    saveCurrentRoom();
     setStatus(`Room ${roomCode} created – waiting for opponent`);
   } else {
     content.innerHTML = `<p style="color:#ff6666;">${result.error || 'Failed to create room'}</p>`;
@@ -536,6 +537,7 @@ function startMultiplayerAfterCreate() {
       document.getElementById('multi-modal').style.display = 'none';
       setStatus(`Joined room ${roomCode}`);
       startPolling();
+      saveCurrentRoom();
     } else {
       alert(result.error || 'Failed to join room');
     }
@@ -561,6 +563,16 @@ function startMultiplayerAfterCreate() {
     currentPlayer = (myRole === fullState.currentPlayer) ? "player" : "ai";
     updateUI();
   }
+
+function loadMultiplayerStateFromView(v) {
+  playerHand = v.myHand || [];
+  playerPayoff = v.myPayoff || [];
+  playerSides = v.mySides || [[],[],[],[]];
+  aiPayoff = v.opponentPayoff || [];
+  aiSides = v.opponentSides || [[],[],[],[]];
+  centers = v.centers || [[],[],[],[]];
+  currentPlayer = (v.myRole === v.currentPlayer) ? "player" : "ai";
+}
   
 async function startPolling() {
   if (pollInterval) clearInterval(pollInterval);
@@ -617,6 +629,54 @@ async function startPolling() {
     }
   }, 1000);   // Check every 1 second (but only act after 10s delay)
 }
+
+ // ====================== ROOM PERSISTENCE ======================
+function saveCurrentRoom() {
+  if (isMultiplayer && roomCode && myRole) {
+    localStorage.setItem('spiteRoomCode', roomCode);
+    localStorage.setItem('spiteMyRole', myRole);
+  }
+}
+
+function clearCurrentRoom() {
+  localStorage.removeItem('spiteRoomCode');
+  localStorage.removeItem('spiteMyRole');
+}
+
+async function tryReconnectToRoom() {
+  const savedCode = localStorage.getItem('spiteRoomCode');
+  const savedRole = localStorage.getItem('spiteMyRole');
+
+  if (!savedCode || !savedRole) return false;
+
+  setStatus("Reconnecting to previous room...", "#ffaa00");
+
+  const result = await callBackend('getState', { 
+    roomCode: savedCode, 
+    playerRole: savedRole 
+  });
+
+  if (result.success && result.view) {
+    roomCode = savedCode;
+    myRole = savedRole;
+    isMultiplayer = true;
+    opponentJoined = true;           // assume opponent is still there
+    lastSeenVersion = 0;
+    turnEndTime = Date.now();
+
+    loadMultiplayerStateFromView(result.view);   // we'll define this next
+
+    startPolling();
+    updateUI();
+    updateTurnStatus();
+    setStatus("✅ Reconnected to room " + roomCode, "#00ff88");
+    return true;
+  } else {
+    setStatus("Could not reconnect – room may have expired.", "#ff6666");
+    clearCurrentRoom();
+    return false;
+  }
+} 
 
   function stopPolling() {
     if (pollInterval) clearInterval(pollInterval);
@@ -1203,6 +1263,7 @@ function endPlayerTurn() {
     handStreakBonus = 0;
     if (isMultiplayer) {
       stopPolling();
+      clearCurrentRoom();
       isMultiplayer = false;
       roomCode = null;
       myRole = null;
@@ -1234,34 +1295,50 @@ function endPlayerTurn() {
     startGame();
   };
 
-  function startGame() {
-    if (isMultiplayer) {
-      stopPolling();
-      isMultiplayer = false;
-      roomCode = null;
-      myRole = null;
-    }
-    stock = shuffle(createDeck());
-    playerPayoff = stock.splice(0,13);
-    aiPayoff = stock.splice(0,13);
-    playerHand = stock.splice(0,5);
-    aiHand = stock.splice(0,5);
-    playerSides = [[],[],[],[]];
-    aiSides = [[],[],[],[]];
-    centers = [[],[],[],[]];
-    selected = null;
-    hasPlayedThisTurn = false;
-    hasDiscardedThisTurn = false;
-    currentStreak = 0;
-    handStreakBonus = 0;
-
-    currentPlayer = playerHand.some(canStartCenter) ? "player" : "ai";
-    updateUI();
-    updateScores();
-    setStatus(currentPlayer === "player" ? "Your turn – play as many as you can!" : "AI starts...");
-
-    if (currentPlayer === "ai" && !isMultiplayer) setTimeout(aiTurn, 800);
+function startGame() {
+  // Clear any old single-player state
+  if (isMultiplayer) {
+    stopPolling();
+    clearCurrentRoom();
   }
+
+  // First try to reconnect to a previous multiplayer room
+  if (localStorage.getItem('spiteRoomCode')) {
+    tryReconnectToRoom().then(reconnected => {
+      if (reconnected) return;   // successfully reconnected
+      // If reconnect failed, fall through to normal new game
+      initNewSinglePlayerGame();
+    });
+    return;
+  }
+
+  // Normal single-player start
+  initNewSinglePlayerGame();
+}
+
+function initNewSinglePlayerGame() {
+  stock = shuffle(createDeck());
+  playerPayoff = stock.splice(0,13);
+  aiPayoff = stock.splice(0,13);
+  playerHand = stock.splice(0,5);
+  aiHand = stock.splice(0,5);
+  playerSides = [[],[],[],[]];
+  aiSides = [[],[],[],[]];
+  centers = [[],[],[],[]];
+
+  selected = null;
+  hasPlayedThisTurn = false;
+  hasDiscardedThisTurn = false;
+  currentStreak = 0;
+  handStreakBonus = 0;
+
+  currentPlayer = playerHand.some(canStartCenter) ? "player" : "ai";
+  updateUI();
+  updateScores();
+  setStatus(currentPlayer === "player" ? "Your turn – play as many as you can!" : "AI starts...");
+
+  if (currentPlayer === "ai" && !isMultiplayer) setTimeout(aiTurn, 800);
+}
 
   // Load saved scores
   if (localStorage.getItem('spitePlayerScore')) {
