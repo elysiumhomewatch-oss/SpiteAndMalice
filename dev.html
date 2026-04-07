@@ -869,29 +869,38 @@ function discardToSide(sideIdx) {
   var handIdx = parseInt(selected.split('-')[1]);
   var card = playerHand[handIdx];
 
-  // Optimistic update
+  // Optimistic local update
   playerSides[sideIdx].push(card);
   playerHand.splice(handIdx, 1);
   hasDiscardedThisTurn = true;
   selected = null;
 
   updateUI();
-  setStatus("Discarded to side stack");
+  setStatus("Discarded to side stack – ending turn");
 
   if (isMultiplayer) {
-    callBackend('discardToSide', {
+    // Send the COMPLETE current state to the server (only once per turn)
+    callBackend('endTurn', {
       roomCode: roomCode,
       playerRole: myRole,
       sideIdx: sideIdx,
-      handIdx: handIdx
+      handIdx: handIdx,
+      // Send full local state so server becomes authoritative
+      fullState: {
+        myHand: playerHand,
+        myPayoff: playerPayoff,
+        mySides: playerSides,
+        centers: centers,
+        stock: stock
+      }
     }).then(result => {
       if (!result.success) {
-        setStatus(result.error || "Discard failed", "#ff6666");
+        setStatus(result.error || "Failed to end turn", "#ff6666");
       }
     });
   }
 
-  endPlayerTurn();   // ← Only here do we end the turn
+  endPlayerTurn();
 }
 
   // ====================== MULTIPLAYER OVERRIDE: tryPlayToCenter ======================
@@ -910,7 +919,7 @@ async function tryPlayToCenter(i) {
     return;
   }
 
-  // === OPTIMISTIC UPDATE (instant feel) ===
+  // === OPTIMISTIC UPDATE ONLY (no server call yet) ===
   var intendedRank = getIntendedRank(card, topCard(centers[i]));
   var cardCopy = { rank: intendedRank, suit: card.suit, color: card.color };
 
@@ -928,12 +937,6 @@ async function tryPlayToCenter(i) {
   else playerSides[idx].pop();
 
   centers[i].push(cardCopy);
-    // Optimistic hand refill (instant feel)
-  if (playerHand.length === 0) {
-    while (playerHand.length < 5 && stock.length > 0) {
-      playerHand.push(stock.shift());
-    }
-  }
 
   if (intendedRank === 'Q' || centers[i].length >= 13) {
     stock = stock.concat(centers[i]);
@@ -941,7 +944,13 @@ async function tryPlayToCenter(i) {
     centers[i] = [];
   }
 
-  // Streak & UI
+  // Hand refill (local)
+  if (playerHand.length === 0) {
+    while (playerHand.length < 5 && stock.length > 0) {
+      playerHand.push(stock.shift());
+    }
+  }
+
   currentStreak++;
   currentStreakFromPayoff = (type === "payoff");
   const points = getStreakPoints(currentStreak, currentStreakFromPayoff);
@@ -959,26 +968,7 @@ async function tryPlayToCenter(i) {
     return;
   }
 
-  // === BACKGROUND SERVER SYNC ===
-  if (isMultiplayer) {
-    const sourceType = type === "payoff" ? "payoff" : type === "hand" ? "hand" : "side";
-    const sourceIdx = (type === "payoff") ? 0 : idx;
-
-    callBackend('playMove', {
-      roomCode: roomCode,
-      playerRole: myRole,
-      sourceType: sourceType,
-      sourceIdx: sourceIdx,
-      centerIdx: i
-    }).then(result => {
-      if (!result.success) {
-        setStatus(result.error || "Server rejected move", "#ff6666");
-      }
-    });
-  }
-
-  // DO NOT call endPlayerTurn() here — player can continue playing!
-  // Turn only ends when they discard to a side stack.
+  // NO server call here anymore — we send everything only on discard
 }
 
   function animateCardPlay(sourceEl, card, targetPileEl) {
