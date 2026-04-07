@@ -881,7 +881,7 @@ function discardToSide(sideIdx) {
 }
 
   // ====================== MULTIPLAYER OVERRIDE: tryPlayToCenter ======================
-  const originalTryPlayToCenter = tryPlayToCenter || function(){};
+  
   
 async function tryPlayToCenter(i) {
   if (currentPlayer !== "player" || !selected) return;
@@ -945,7 +945,24 @@ async function tryPlayToCenter(i) {
   setStatus(`Played ${cardDisplay(cardCopy)} (+${points})`);
 
   if (playerPayoff.length === 0) {
-    endHand("player");
+    if (isMultiplayer) {
+      // ← NEW: Send the FINAL move to server before ending hand
+      setStatus("Saving final move & ending hand...");
+      callBackend('endHand', {
+        roomCode: roomCode,
+        playerRole: myRole,
+        centers: JSON.stringify(centers),
+        mySides: JSON.stringify(playerSides),
+        myHand: JSON.stringify(playerHand),
+        myPayoff: JSON.stringify(playerPayoff),
+        stock: JSON.stringify(stock)
+      }).then(result => {
+        if (!result.success) {
+          console.error("endHand failed:", result.error);
+        }
+      });
+    }
+    endHand("player");   // this will show results screen + clear local room
     return;
   }
 
@@ -1283,7 +1300,7 @@ function endHand(winner) {
   if (isMultiplayer) {
     // Clean up room on both devices + server
     clearCurrentRoom();
-    callBackend('cleanupRoom', { roomCode: roomCode });
+    //callBackend('cleanupRoom', { roomCode: roomCode });
     stopPolling();
     isMultiplayer = false;
     roomCode = null;
