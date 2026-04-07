@@ -406,6 +406,8 @@
   let roomCode = null;
   let myRole = null; // 'p1' or 'p2'
   let pollInterval = null;
+  let opponentJoined = false;
+  let lastSeenVersion = 0;
 
   var statusEl = document.getElementById("status");
   var newBtn = document.getElementById("new-game");
@@ -450,6 +452,8 @@ async function createRoom() {
     roomCode = result.roomCode;
     myRole = 'p1';
     isMultiplayer = true;
+    opponentJoined = false;           // ← NEW
+    lastSeenVersion = 0;              // ← NEW
     loadMultiplayerState(result.state);
 
     // Show room code nicely
@@ -498,6 +502,8 @@ function startMultiplayerAfterCreate() {
       roomCode = code;
       myRole = 'p2';
       isMultiplayer = true;
+      opponentJoined = true;     // we are P2, so opponent is already here
+      lastSeenVersion = 0;
       loadMultiplayerState(result.state);
       document.getElementById('multi-modal').style.display = 'none';
       setStatus(`Joined room ${roomCode}`);
@@ -528,13 +534,20 @@ function startMultiplayerAfterCreate() {
     updateUI();
   }
 
-  async function startPolling() {
-    if (pollInterval) clearInterval(pollInterval);
-    pollInterval = setInterval(async () => {
-      if (!isMultiplayer || !roomCode) return;
-      const result = await callBackend('getState', { roomCode: roomCode, playerRole: myRole });
-      if (result.success && result.view) {
-        const v = result.view;
+async function startPolling() {
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(async () => {
+    if (!isMultiplayer || !roomCode) return;
+
+    const result = await callBackend('getState', { roomCode: roomCode, playerRole: myRole });
+    if (result.success && result.view) {
+      const v = result.view;
+
+      // Only update if the server state actually changed
+      if (v.version > lastSeenVersion) {
+        lastSeenVersion = v.version;
+
+        // Update all game data
         playerHand = v.myHand || [];
         playerPayoff = v.myPayoff || [];
         playerSides = v.mySides || [[],[],[],[]];
@@ -542,12 +555,22 @@ function startMultiplayerAfterCreate() {
         aiSides = v.opponentSides || [[],[],[],[]];
         centers = v.centers || [[],[],[],[]];
         currentPlayer = (v.myRole === v.currentPlayer) ? "player" : "ai";
+
+        // Handshake message
+        if (v.opponentJoined && !opponentJoined) {
+          opponentJoined = true;
+          setStatus("🎉 Opponent has joined the room!", "#00ff88");
+          // Optional: show a quick popup if you want
+        }
+
         updateUI();
+
         if (playerPayoff.length === 0) endHand("player");
         else if (aiPayoff.length === 0) endHand("ai");
       }
-    }, 2000); // poll every 2 seconds
-  }
+    }
+  }, 1500); // slightly faster for snappier feel
+}
 
   function stopPolling() {
     if (pollInterval) clearInterval(pollInterval);
