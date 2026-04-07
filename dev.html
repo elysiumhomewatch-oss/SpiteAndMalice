@@ -858,30 +858,37 @@ function discardToSide(sideIdx) {
   var handIdx = parseInt(selected.split('-')[1]);
   var card = playerHand[handIdx];
 
+  // Optimistic local update
   playerSides[sideIdx].push(card);
   playerHand.splice(handIdx, 1);
   hasDiscardedThisTurn = true;
   selected = null;
 
   updateUI();
-  setStatus("Ending turn... sending to server");
+  setStatus("Ending turn — saving full turn to server...");
 
   if (isMultiplayer) {
+    // Send the complete final state of this turn (this is the ONLY server update)
     callBackend('endTurn', {
       roomCode: roomCode,
       playerRole: myRole,
-      centers: centers,
-      mySides: playerSides,
-      myHand: playerHand,
-      myPayoff: playerPayoff
+      centers: centers,          // all center piles after your plays
+      mySides: playerSides,      // your side stacks
+      myHand: playerHand,        // your hand (after refill)
+      myPayoff: playerPayoff     // your payoff pile
     }).then(result => {
-      if (!result.success) {
+      if (result.success) {
+        setStatus("Turn saved successfully", "#00ff88");
+      } else {
         setStatus(result.error || "Failed to save turn", "#ff6666");
       }
+    }).catch(err => {
+      console.error(err);
+      setStatus("Connection error while saving turn", "#ff6666");
     });
   }
 
-  endPlayerTurn();
+  endPlayerTurn();   // switches to waiting state locally
 }
 
   // ====================== MULTIPLAYER OVERRIDE: tryPlayToCenter ======================
@@ -900,10 +907,11 @@ async function tryPlayToCenter(i) {
     return;
   }
 
-  // Pure optimistic local update
+  // === PURE OPTIMISTIC LOCAL UPDATE ONLY ===
   var intendedRank = getIntendedRank(card, topCard(centers[i]));
   var cardCopy = { rank: intendedRank, suit: card.suit, color: card.color };
 
+  // Animation
   var sourceEl = null;
   if (type === "hand") sourceEl = document.querySelectorAll("#player-hand .card")[idx];
   else if (type === "payoff") sourceEl = document.getElementById("player-payoff-pile").querySelector(".card");
@@ -912,24 +920,29 @@ async function tryPlayToCenter(i) {
   var targetPileEl = document.querySelectorAll("#centers .pile")[i];
   if (sourceEl && targetPileEl) animateCardPlay(sourceEl, cardCopy, targetPileEl);
 
+  // Remove card from source
   if (type === "hand") playerHand.splice(idx, 1);
   else if (type === "payoff") playerPayoff.pop();
   else playerSides[idx].pop();
 
+  // Add to center
   centers[i].push(cardCopy);
 
+  // Clear center if Q or full
   if (intendedRank === 'Q' || centers[i].length >= 13) {
     stock = stock.concat(centers[i]);
     shuffle(stock);
     centers[i] = [];
   }
 
+  // Auto-refill hand if empty (local only)
   if (playerHand.length === 0) {
     while (playerHand.length < 5 && stock.length > 0) {
       playerHand.push(stock.shift());
     }
   }
 
+  // Streak
   currentStreak++;
   currentStreakFromPayoff = (type === "payoff");
   const points = getStreakPoints(currentStreak, currentStreakFromPayoff);
@@ -944,7 +957,10 @@ async function tryPlayToCenter(i) {
 
   if (playerPayoff.length === 0) {
     endHand("player");
+    return;
   }
+
+  // NO server call here — we only save when the turn ends (on discard)
 }
 
   function animateCardPlay(sourceEl, card, targetPileEl) {
