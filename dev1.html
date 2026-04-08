@@ -969,62 +969,113 @@ function aiPlayCard(sourceType, sourceIndex, centerIdx) {
   return true;
 }
 
+// ====================== IMPROVED AI LOGIC ======================
 function aiTurn() {
-  if (isMultiplayer) return;
-  let played = false;
+  if (isMultiplayer) return;   // multiplayer uses polling
+
+  let playedAnyCardThisTurn = false;
   let loopSafety = 0;
 
-  // Prioritize Payoff plays
-  while (aiPayoff.length > 0 && loopSafety < 20) {
+  // 1. PRIORITY: Empty Payoff pile first (most important)
+  while (aiPayoff.length > 0 && loopSafety < 30) {
     loopSafety++;
-    let tp = topCard(aiPayoff);
-    let playedThisLoop = false;
+    let payoffCard = topCard(aiPayoff);
+    let moved = false;
+
     for (let i = 0; i < 4; i++) {
-      if (aiCanPlay(tp, i)) {
+      if (aiCanPlay(payoffCard, i)) {
         if (aiPlayCard("payoff", 0, i)) {
-          played = true;
-          playedThisLoop = true;
+          playedAnyCardThisTurn = true;
+          moved = true;
           break;
         }
       }
     }
-    if (!playedThisLoop) break;
+    if (!moved) break;   // cannot play payoff anymore
   }
 
-  // Aces to empty centers
-  if (!played) {
-    for (let h = 0; h < aiHand.length; h++) {
-      let card = aiHand[h];
-      if (card.rank === 'A') {
-        for (let j = 0; j < 4; j++) {
-          if (!topCard(centers[j])) {
-            if (aiPlayCard("hand", h, j)) {
-              played = true;
-              break;
-            }
-          }
-        }
-        if (played) break;
-      }
-    }
-  }
+  // 2. Play from Hand and Side stacks (maximize cards played)
+  let keepPlaying = true;
+  while (keepPlaying && loopSafety < 50) {
+    loopSafety++;
+    keepPlaying = false;
 
-  // Basic play any legal card
-  if (!played && aiHand.length > 0) {
+    // Try hand cards
     for (let h = 0; h < aiHand.length; h++) {
       let card = aiHand[h];
-      for (let j = 0; j < 4; j++) {
-        if (aiCanPlay(card, j)) {
-          if (aiPlayCard("hand", h, j)) {
-            played = true;
+      for (let i = 0; i < 4; i++) {
+        if (aiCanPlay(card, i) && !wouldHelpPlayer(card, i)) {
+          if (aiPlayCard("hand", h, i)) {
+            playedAnyCardThisTurn = true;
+            keepPlaying = true;
             break;
           }
         }
       }
-      if (played) break;
+      if (keepPlaying) break;
+    }
+
+    // Try side stacks if no hand move
+    if (!keepPlaying) {
+      for (let s = 0; s < 4; s++) {
+        let card = topCard(aiSides[s]);
+        if (card) {
+          for (let i = 0; i < 4; i++) {
+            if (aiCanPlay(card, i) && !wouldHelpPlayer(card, i)) {
+              if (aiPlayCard("side", s, i)) {
+                playedAnyCardThisTurn = true;
+                keepPlaying = true;
+                break;
+              }
+            }
+          }
+          if (keepPlaying) break;
+        }
+      }
     }
   }
 
+  // 3. FINAL STEP: Always discard one card to end the turn
+  if (aiHand.length > 0) {
+    // Choose the "least useful" card to discard
+    let playerNeeded = getNextNeededForPayoff(playerPayoff);
+    let discardCandidates = aiHand.filter(c => {
+      return !playerNeeded || (c.rank !== playerNeeded && c.rank !== 'K');
+    });
+
+    let cardToDiscard = discardCandidates.length > 0 
+      ? discardCandidates[0] 
+      : aiHand[0];
+
+    let discardIndex = aiHand.indexOf(cardToDiscard);
+
+    // Choose best side stack (highest top card or empty)
+    let bestSide = 0;
+    let bestScore = -999;
+    for (let s = 0; s < 4; s++) {
+      let top = topCard(aiSides[s]);
+      let score = top ? (VALUE[top.rank] || 0) : 20;   // empty = best
+      if (score > bestScore) {
+        bestScore = score;
+        bestSide = s;
+      }
+    }
+
+    aiSides[bestSide].push(cardToDiscard);
+    aiHand.splice(discardIndex, 1);
+
+    updateUI();
+    setStatus("AI discarded to side stack");
+  }
+
+  // Refill AI hand if empty
+  if (aiHand.length === 0) {
+    while (aiHand.length < 5 && stock.length > 0) {
+      aiHand.push(stock.shift());
+    }
+  }
+
+  // End AI turn - switch back to player
   if (aiPayoff.length === 0) {
     endHand("ai");
     return;
@@ -1033,6 +1084,7 @@ function aiTurn() {
   currentPlayer = "player";
   currentStreak = 0;
   setStatus("Your turn – play as many as you can!");
+  updateUI();
 }
 
 // ====================== END HAND ======================
