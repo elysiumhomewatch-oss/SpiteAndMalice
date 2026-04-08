@@ -484,10 +484,15 @@ async function callBackend(action, extraParams = {}) {
 async function createRoom() {
   const modalTitle = document.getElementById('modal-title');
   const content = document.getElementById('lobby-content');
+  
   modalTitle.textContent = 'Creating Room...';
-  content.innerHTML = `<div style="text-align:center;padding:40px 20px;"><p style="font-size:1.3rem;">Please wait...</p><div style="width:50px;height:50px;border:6px solid #f0c14e;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto;"></div></div>`;
+  content.innerHTML = `<div style="text-align:center;padding:40px 20px;">
+    <p style="font-size:1.3rem;">Please wait...</p>
+    <div style="width:50px;height:50px;border:6px solid #f0c14e;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto;"></div>
+  </div>`;
 
   const result = await callBackend('create');
+
   if (result.success) {
     roomCode = result.roomCode;
     myRole = 'p1';
@@ -497,18 +502,32 @@ async function createRoom() {
     saveCurrentRoom();
 
     const fullLink = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
+
     modalTitle.textContent = '🎉 Room Created!';
     content.innerHTML = `
-      <p style="margin:10px 0 5px;font-size:1.1rem;">Share this link:</p>
-      <div style="background:#05261f;padding:15px;border-radius:12px;font-size:1.4rem;font-weight:bold;margin:15px 0;border:3px solid #f0c14e;" id="room-link-display">${fullLink}</div>
-      <button onclick="copyRoomLink()" style="background:#f0c14e;color:#222;padding:12px 24px;border:none;border-radius:10px;font-size:1.2rem;font-weight:bold;margin:10px 0;">📋 Copy Link</button>
-      <p style="font-size:0.95rem;margin-top:15px;opacity:0.9;">Your friend taps the link to join.</p>
-      <button onclick="startMultiplayerAfterCreate()" style="margin-top:20px;background:#00ff88;color:#222;padding:12px 30px;border:none;border-radius:10px;font-size:1.1rem;font-weight:bold;">I'm Ready – Start Playing</button>
+      <h3 style="color:#00ff88;">Share this link with your friend:</h3>
+      <div style="background:#05261f; padding:16px; border-radius:12px; font-size:1.35rem; font-weight:bold; word-break:break-all; margin:15px 0; border:3px solid #f0c14e;" id="room-link-display">
+        ${fullLink}
+      </div>
+      
+      <button onclick="copyRoomLink()" style="background:#f0c14e; color:#222; padding:14px 28px; border:none; border-radius:10px; font-size:1.2rem; font-weight:bold; margin:10px 0; width:100%;">
+        📋 Copy Link
+      </button>
+      
+      <p style="font-size:1rem; margin-top:15px; opacity:0.9;">
+        Your friend can open this link directly.<br>
+        They don't need the app installed — it will open in browser.
+      </p>
+      
+      <button onclick="startMultiplayerAfterCreate()" style="margin-top:20px; background:#00ff88; color:#222; padding:14px 30px; border:none; border-radius:10px; font-size:1.1rem; font-weight:bold; width:100%;">
+        ✅ I'm Ready – Start Playing
+      </button>
     `;
+
     startPolling();
-    setStatus(`Room ${roomCode} created`);
+    setStatus(`Room ${roomCode} created – waiting for opponent`);
   } else {
-    content.innerHTML = `<p style="color:#ff6666;">${result.error || 'Failed'}</p>`;
+    content.innerHTML = `<p style="color:#ff6666;">${result.error || 'Failed to create room'}</p>`;
   }
 }
 
@@ -1241,9 +1260,34 @@ window.addEventListener('load', () => {
   document.getElementById("new-game").onclick = startGame;
   document.getElementById("multi-create-btn").onclick = createRoom;
   document.getElementById("multi-join-btn").onclick = () => {
-    const code = prompt('Enter room code:');
+  const choice = prompt(
+    "How do you want to join?\n\n" +
+    "1. Paste full link (recommended)\n" +
+    "2. Enter 6-digit room code\n\n" +
+    "Type 1 or 2:"
+  );
+
+  if (choice === "1" || choice === null) {
+    const link = prompt("Paste the full room link:");
+    if (link) {
+      try {
+        const url = new URL(link);
+        const code = url.searchParams.get('room');
+        if (code) {
+          joinRoom(code.toUpperCase().trim());
+        } else {
+          alert("Invalid link. Make sure it contains ?room=XXXXXX");
+        }
+      } catch(e) {
+        alert("Invalid link format");
+      }
+    }
+  } 
+  else if (choice === "2") {
+    const code = prompt('Enter 6-digit room code:');
     if (code) joinRoom(code.toUpperCase().trim());
-  };
+  }
+};
 
   handleDeepLink();
   startGame();
