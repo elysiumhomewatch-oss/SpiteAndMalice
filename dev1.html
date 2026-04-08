@@ -501,46 +501,56 @@ async function createRoom() {
     </div>
   `;
 
-  try {
-    const result = await callBackend('create');
+  let retries = 3;
+  let result = null;
 
-    if (result.success) {
-      roomCode = result.roomCode;
-      myRole = 'p1';
-      isMultiplayer = true;
-      lastSeenVersion = 0;
+  while (retries > 0) {
+    try {
+      result = await callBackend('create');
+      console.log('🔧 createRoom raw result from server:', result);   // ← debug line
 
-      // (this is the exact text just AFTER the update)
-      loadMultiplayerState(result.state);
-      lastSeenVersion = result.state.version || 0;   // ← tiny safety so first poll doesn't think it's old
-      saveCurrentRoom();
+      if (result.success) {
+        roomCode = result.roomCode;
+        myRole = 'p1';
+        isMultiplayer = true;
+        lastSeenVersion = 0;
 
-      const fullLink = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
+        loadMultiplayerState(result.state);   // your existing function
+        saveCurrentRoom();                    // your existing function
 
-      modalTitle.textContent = '🎉 Room Created!';
-      content.innerHTML = `
-        <h3 style="color:#00ff88;margin-bottom:12px;">Share this link:</h3>
-        <div style="background:#05261f;padding:18px;border-radius:12px;font-size:1.35rem;font-weight:bold;word-break:break-all;margin:15px 0;border:4px solid #f0c14e;" id="room-link-display">
-          ${fullLink}
-        </div>
-        <button onclick="copyRoomLink()" style="background:#f0c14e;color:#222;padding:16px;border:none;border-radius:10px;font-size:1.25rem;font-weight:bold;width:100%;margin:12px 0;">📋 Copy Link</button>
-        <button onclick="startMultiplayerAfterCreate()" style="background:#00ff88;color:#222;padding:16px;border:none;border-radius:10px;font-size:1.2rem;font-weight:bold;width:100%;">✅ I'm Ready – Start Playing</button>
-      `;
+        const fullLink = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
 
-      setTimeout(startPolling, 800);   // ← CHANGED: tiny delay so the new ROOM- sheet is fully visible to the next getState call
-      setStatus(`Room ${roomCode} created – waiting for opponent`);
-    } else {
-      modalTitle.textContent = 'Error';
-      content.innerHTML = `<p style="color:#ff6666;font-size:1.2rem;">${result.error || 'Failed to create room'}</p>`;
+        modalTitle.textContent = '🎉 Room Created!';
+        content.innerHTML = `
+          <h3 style="color:#00ff88;margin-bottom:12px;">Share this link:</h3>
+          <div style="background:#05261f;padding:18px;border-radius:12px;font-size:1.35rem;font-weight:bold;word-break:break-all;margin:15px 0;border:4px solid #f0c14e;" id="room-link-display">
+            ${fullLink}
+          </div>
+          <button onclick="copyRoomLink()" style="background:#f0c14e;color:#222;padding:16px;border:none;border-radius:10px;font-size:1.25rem;font-weight:bold;width:100%;margin:12px 0;">📋 Copy Link</button>
+          <button onclick="startMultiplayerAfterCreate()" style="background:#00ff88;color:#222;padding:16px;border:none;border-radius:10px;font-size:1.2rem;font-weight:bold;width:100%;">✅ I'm Ready – Start Playing</button>
+        `;
+
+        setTimeout(startPolling, 800);   // safe delay for sheet
+        setStatus(`Room ${roomCode} created – waiting for opponent`);
+        return;   // success → stop everything
+      } else {
+        // server returned an error (not a connection problem)
+        modalTitle.textContent = 'Error';
+        content.innerHTML = `<p style="color:#ff6666;font-size:1.2rem;">${result.error || 'Failed to create room'}</p>`;
+        return;
+      }
+    } catch (err) {
+      console.error('createRoom exception:', err);
+      retries--;
+      if (retries > 0) {
+        await new Promise(resolve => setTimeout(resolve, 600));
+      }
     }
-  } catch (err) {
-    modalTitle.textContent = 'Connection Error';
-    content.innerHTML = `<p style="color:#ff6666;">Please check your internet and try again.</p>`;
-  } finally {
-    // Re-enable buttons
-    if (createBtn) createBtn.disabled = false;
-    if (joinBtn) joinBtn.disabled = false;
   }
+
+  // only reach here if all retries failed
+  modalTitle.textContent = 'Connection Error';
+  content.innerHTML = `<p style="color:#ff6666;">Please check your internet and try again.<br><small>(Check console for details)</small></p>`;
 }
 
 function copyRoomLink() {
