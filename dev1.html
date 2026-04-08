@@ -844,34 +844,50 @@ function selectCard(type, idx) {
   setStatus(type === "hand" ? "Tap center or side stack" : "Tap center pile to play");
 }
 
-function discardToSide(sideIdx) {
+async function discardToSide(sideIdx) {
   if (currentPlayer !== "player" || !selected || !selected.startsWith("hand-") || hasDiscardedThisTurn) return;
+
   var handIdx = parseInt(selected.split('-')[1]);
   var card = playerHand[handIdx];
+
   playerSides[sideIdx].push(card);
   playerHand.splice(handIdx, 1);
+
   hasDiscardedThisTurn = true;
   selected = null;
-  updateUI();
-  setStatus("Saving full turn to server...");
-  if (isMultiplayer) {
-    callBackend('endTurn', {
-      roomCode: roomCode,
-      playerRole: myRole,
-      centers: JSON.stringify(centers.map(c => c.map(cardToString))),
-      mySides: JSON.stringify(playerSides.map(p => p.map(cardToString))),
-      myHand: JSON.stringify(playerHand.map(cardToString)),
-      myPayoff: JSON.stringify(playerPayoff.map(cardToString)),
-      stock: JSON.stringify(stock.map(cardToString))
-    }).then(result => {
-      if (result.success) setStatus("Turn completed", "#00ff88");
-      else setStatus(result.error || "Server error", "#ff6666");
-    });
-  }
-  updateUI();
-  endPlayerTurn();
-}
 
+  updateUI();
+  setStatus("Saving turn to server...");
+
+  if (isMultiplayer) {
+    try {
+      const result = await callBackend('endTurn', {
+        roomCode: roomCode,
+        playerRole: myRole,
+        centers: JSON.stringify(centers.map(c => c.map(cardToString))),
+        mySides: JSON.stringify(playerSides.map(p => p.map(cardToString))),
+        myHand: JSON.stringify(playerHand.map(cardToString)),
+        myPayoff: JSON.stringify(playerPayoff.map(cardToString)),
+        stock: JSON.stringify(stock.map(cardToString))
+      });
+
+      if (result.success) {
+        setStatus("Turn completed", "#00ff88");
+        // Do NOT change currentPlayer here - let the next poll do it
+      } else {
+        setStatus(result.error || "Server error", "#ff6666");
+        hasDiscardedThisTurn = false; // allow retry
+      }
+    } catch (err) {
+      console.error(err);
+      setStatus("Connection error", "#ff6666");
+      hasDiscardedThisTurn = false;
+    }
+  } else {
+    // single player - keep original behavior
+    endPlayerTurn();
+  }
+}
 async function tryPlayToCenter(i) {
   if (currentPlayer !== "player" || !selected) return;
 
@@ -976,7 +992,7 @@ function endPlayerTurn() {
   currentStreak = 0;
 
   if (isMultiplayer) {
-    currentPlayer = "ai";
+    //currentPlayer = "ai";
     turnEndTime = Date.now();
     updateUI();
     updateTurnStatus();
