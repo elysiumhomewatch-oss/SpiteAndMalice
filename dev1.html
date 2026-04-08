@@ -279,17 +279,13 @@
     </div>
   </div>
 
-  <div class="section">
-    <h3>CENTER PILES • A→Q • Kings Wild</h3>
-    <div id="centers" class="cards"></div>
-      <div class="section">
-    
-    
-    <!-- NEW: Clear Turn Indicator -->
-    <div id="turn-indicator" style="margin: 15px auto; padding: 12px 24px; border-radius: 50px; font-size: 1.4rem; font-weight: bold; text-align: center; max-width: 380px; box-shadow: 0 6px 20px rgba(0,0,0,0.6); transition: all 0.4s;">
-    </div>
-  </div>
-  </div>
+ <div class="section">
+  <h3>CENTER PILES • A→Q • Kings Wild</h3>
+  <div id="centers" class="cards"></div>
+  
+  <!-- Turn Indicator -->
+  <div id="turn-indicator" style="margin: 15px auto; padding: 12px 24px; border-radius: 50px; font-size: 1.4rem; font-weight: bold; text-align: center; max-width: 380px; box-shadow: 0 6px 20px rgba(0,0,0,0.6); transition: all 0.4s;"></div>
+</div>
 
   <div class="player-row">
     <div class="pile-group">
@@ -317,22 +313,37 @@
   <button id="help-btn" style="background:#555; color:white;">Help ❔</button>
 </div>
 
-<div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-  <button id="new-game">New Game (Single Player)</button>
-  <button id="multi-create-btn">Create Room</button>
-  <button id="multi-join-btn">Join Room</button>
-  <button id="help-btn" style="background: #555; color: white;">Help ❔</button>
-</div>
-
 <!-- Streak Display -->
 <div id="streak-display" class="streak-display"></div>
 
+<!-- Results Screen -->
 <!-- Results Screen -->
 <div id="results-screen" class="results-screen">
   <div class="results-content">
     <h2 id="result-title"></h2>
     <div id="result-details"></div>
     <button id="continue-btn">Continue Playing</button>
+  </div>
+</div>
+
+<!-- ====================== MULTIPLAYER MODAL ====================== -->
+<div id="multi-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.92); z-index: 30000; align-items: center; justify-content: center;">
+  <div style="background: #0b4a38; padding: 30px; border-radius: 20px; border: 6px solid #f0c14e; max-width: 420px; text-align: center; color: white; width: 90%;">
+    <h2 id="modal-title" style="color: #f0c14e; margin-bottom: 20px;">Multiplayer</h2>
+    <div id="lobby-content" style="min-height: 160px;">
+      <!-- Content will be filled by JavaScript -->
+    </div>
+    <button id="close-multi" style="margin-top: 20px; padding: 10px 20px; background: #555; color: white; border: none; border-radius: 8px;">Close</button>
+  </div>
+</div>
+
+<!-- ====================== HELP MODAL ====================== -->
+<!-- (Add your full original help modal here if you want it. For now, a basic one) -->
+<div id="help-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.92); z-index: 30000; overflow-y: auto;">
+  <div style="max-width: 620px; margin: 40px auto; background: #0b4a38; border: 6px solid #f0c14e; border-radius: 20px; padding: 25px; color: white;">
+    <h2 style="color: #f0c14e;">How to Play</h2>
+    <p>Your help content goes here...</p>
+    <button id="close-help" style="margin-top: 20px; width: 100%; padding: 12px; background: #f0c14e; color: #222; border: none; border-radius: 8px;">Close</button>
   </div>
 </div>
 
@@ -1106,7 +1117,19 @@ function startGame() {
   if (currentPlayer === "ai" && !isMultiplayer) setTimeout(aiTurn, 800);
   document.getElementById('abandon-btn').style.display = 'none';
 }
+function initMultiplayerModal() {
+  const modal = document.getElementById('multi-modal');
+  const closeBtn = document.getElementById('close-multi');
+  if (closeBtn) closeBtn.onclick = () => modal.style.display = 'none';
+}
 
+function initHelpModal() {
+  const helpModal = document.getElementById('help-modal');
+  const helpBtn = document.getElementById('help-btn');
+  if (!helpModal || !helpBtn) return;
+  helpBtn.addEventListener('click', () => helpModal.style.display = 'block');
+  // Add close logic if needed
+}
 // ====================== WINDOW LOAD ======================
 window.addEventListener('load', () => {
   // Init modals (you need to keep your original initHelpModal and initMultiplayerModal)
