@@ -607,10 +607,14 @@ function stopPolling() {
 
 // ====================== UI FUNCTIONS ======================
 function updateUI() {
-  document.getElementById("player-payoff").textContent = playerPayoff.length;
-  document.getElementById("ai-payoff").textContent = aiPayoff.length;
+  // === FORCE PAYOFF COUNT UPDATE ===
+  const playerPayoffEl = document.getElementById("player-payoff");
+  const aiPayoffEl = document.getElementById("ai-payoff");
 
-  // Player Payoff
+  if (playerPayoffEl) playerPayoffEl.textContent = playerPayoff ? playerPayoff.length : 0;
+  if (aiPayoffEl) aiPayoffEl.textContent = aiPayoff ? aiPayoff.length : 0;
+
+  // Player Payoff Pile Visual
   var playerPayoffDiv = document.getElementById("player-payoff-pile");
   playerPayoffDiv.innerHTML = '';
   var pp = topCard(playerPayoff);
@@ -623,7 +627,7 @@ function updateUI() {
   }
   playerPayoffDiv.appendChild(ppCard);
 
-  // AI Payoff
+  // AI Payoff Pile Visual
   var aiPayoffDiv = document.getElementById("ai-payoff-pile");
   aiPayoffDiv.innerHTML = '';
   var ap = topCard(aiPayoff);
@@ -785,6 +789,7 @@ function discardToSide(sideIdx) {
       else setStatus(result.error || "Server error", "#ff6666");
     });
   }
+  updateUI();
   endPlayerTurn();
 }
 
@@ -839,7 +844,7 @@ async function tryPlayToCenter(i) {
   if (playerHand.length === 0 && !isMultiplayer) {
     while (playerHand.length < 5 && stock.length > 0) playerHand.push(stock.shift());
   }
-
+    updateUI();   
   if (playerPayoff.length === 0) {
     if (isMultiplayer) {
       setStatus("Saving final move & ending hand...");
