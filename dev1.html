@@ -649,9 +649,9 @@ async function startPolling() {
 async function pollOnce() {
   if (!isMultiplayer || !roomCode) return;
 
-  // Only poll if it's NOT our turn (opponent is playing)
+  // Current player (the one whose turn it is) should NOT poll
   if (currentPlayer === "player") {
-    return;   // ← current player does NOT poll
+    return;
   }
 
   let retries = 3;
@@ -671,9 +671,19 @@ async function pollOnce() {
        
         if (v.gameOver) {
           endHand(v.winner === myRole ? "player" : "ai");
+          return;
+        }
+
+        // If it's now our turn again, stop polling
+        if (v.currentPlayer === myRole) {
+          currentPlayer = "player";
+          updateTurnStatus();
+          return;
         }
       }
-      return;   // success
+      // Continue polling every 5 seconds while waiting for opponent
+      setTimeout(pollOnce, 5000);
+      return;
     } else {
       retries--;
       if (retries > 0) {
@@ -682,7 +692,7 @@ async function pollOnce() {
     }
   }
 
-  // only reach here after retries failed
+  // Only reach here after retries failed
   setStatus('fail, check internet connection');
 }
 function stopPolling() {
@@ -1002,16 +1012,17 @@ function endPlayerTurn() {
     updateUI();
     updateTurnStatus();
     
-    // Start polling ONLY after ~10 seconds (as you requested)
+    // Start polling for opponent's move after a short delay, then every 5 seconds
     setTimeout(() => {
       if (isMultiplayer && currentPlayer === "ai") {
         pollOnce();
       }
-    }, 10000);   // 10 seconds delay before checking opponent's move
+    }, 1500);   // short initial delay after your turn ends
 
     return;
   }
 
+  // Single-player code (unchanged)
   while (playerHand.length < 5 && stock.length > 0) playerHand.push(stock.shift());
   updateUI();
   if (playerPayoff.length === 0) return;
