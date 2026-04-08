@@ -252,6 +252,7 @@
 
 <div class="table">
   <h1>Spite and Malice v2</h1>
+  
   <div class="scoreboard">
     <div class="score-box">
       YOU: <span id="player-total-score">0</span>
@@ -316,8 +317,24 @@
   <button id="help-btn" style="background:#555; color:white;">Help ❔</button>
 </div>
 
-<!-- === SECTION C: PASTE YOUR MODALS AND DISPLAYS HERE === -->
-<!-- Streak display, results-screen, help-modal, multi-modal (exactly as in your original dev.html) -->
+<div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+  <button id="new-game">New Game (Single Player)</button>
+  <button id="multi-create-btn">Create Room</button>
+  <button id="multi-join-btn">Join Room</button>
+  <button id="help-btn" style="background: #555; color: white;">Help ❔</button>
+</div>
+
+<!-- Streak Display -->
+<div id="streak-display" class="streak-display"></div>
+
+<!-- Results Screen -->
+<div id="results-screen" class="results-screen">
+  <div class="results-content">
+    <h2 id="result-title"></h2>
+    <div id="result-details"></div>
+    <button id="continue-btn">Continue Playing</button>
+  </div>
+</div>
 
 <script>
 // ====================== NEW CARD HELPERS ======================
@@ -332,7 +349,10 @@ function stringToCard(str) {
   return { rank: rank, suit: suit, color: color };
 }
 
- // ====================== GAME CONSTANTS ======================
+
+
+const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzqV0QOGuSQM-uadVJr73K5-I5tm7FDaituyoqEbTPMM0ISzIHtxhEjnE0CT1rJY6B3/exec';
+// ====================== GAME CONSTANTS ======================
   var RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
   var SUITS = ['♥','♦','♣','♠'];
   var VALUE = {A:1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,J:11,Q:12,K:13};
@@ -444,73 +464,8 @@ function stringToCard(str) {
   }
 
   // ====================== MULTIPLAYER HELPER FUNCTIONS ======================
-async function callBackend(action, extraParams = {}) {
-  const params = new URLSearchParams({ action, ...extraParams });
-  
-  try {
-    const response = await fetch(WEB_APP_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params.toString()
-    });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}`);
-    }
 
-    const data = await response.json();
-    return data;
-  } catch (err) {
-    console.error('Backend call failed:', err);
-    return { 
-      success: false, 
-      error: 'Connection error. Please check your internet and try again.' 
-    };
-  }
-}
-
-async function createRoom() {
-  const modalTitle = document.getElementById('modal-title');
-  const content = document.getElementById('lobby-content');
-
-  // Show loading state
-  modalTitle.textContent = 'Creating Room...';
-  content.innerHTML = `
-    <div style="text-align:center; padding:40px 20px;">
-      <p style="font-size:1.3rem; margin-bottom:20px;">Please wait...</p>
-      <div style="width:50px; height:50px; border:6px solid #f0c14e; border-top-color:transparent; border-radius:50%; animation: spin 1s linear infinite; margin:0 auto;"></div>
-    </div>
-  `;
-
-  const result = await callBackend('create');
-
-  if (result.success) {
-    roomCode = result.roomCode;
-    myRole = 'p1';
-    isMultiplayer = true;
-    opponentJoined = false;           // ← NEW
-    lastSeenVersion = 0;              // ← NEW
-    loadMultiplayerState(result.state);
-    saveCurrentRoom();
-    // Show room code nicely
-    modalTitle.textContent = '🎉 Room Created!';
-    content.innerHTML = `
-      <p style="margin:10px 0 5px; font-size:1.1rem;">Share this code with your friend:</p>
-      <div style="background:#05261f; padding:15px; border-radius:12px; font-size:2.2rem; font-weight:bold; letter-spacing:8px; margin:15px 0; border:3px solid #f0c14e;" id="room-code-display">
-        ${roomCode}
-      </div>
-      <button onclick="copyRoomCode()" style="background:#f0c14e; color:#222; padding:12px 24px; border:none; border-radius:10px; font-size:1.2rem; font-weight:bold; margin:10px 0;">📋 Copy Code</button>
-      <p style="font-size:0.95rem; margin-top:15px; opacity:0.9;">Your friend should open the game and tap <strong>Join Room</strong>, then enter this code.</p>
-      <button onclick="startMultiplayerAfterCreate()" style="margin-top:20px; background:#00ff88; color:#222; padding:12px 30px; border:none; border-radius:10px; font-size:1.1rem; font-weight:bold;">I'm Ready – Start Playing</button>
-    `;
-    startPolling();
-    saveCurrentRoom();
-    setStatus(`Room ${roomCode} created – waiting for opponent`);
-  } else {
-    content.innerHTML = `<p style="color:#ff6666;">${result.error || 'Failed to create room'}</p>`;
-    modalTitle.textContent = 'Error';
-  }
-}
 
  function copyRoomCode() {
   const code = document.getElementById('room-code-display').textContent.trim();
@@ -526,52 +481,11 @@ async function createRoom() {
   });
 }
 
-function startMultiplayerAfterCreate() {
-  document.getElementById('multi-modal').style.display = 'none';
-  // Game is already loaded and polling started
-  updateUI();
-  setStatus(`Room ${roomCode} – waiting for opponent to join...`);
-} 
 
-  async function joinRoom(code) {
-    const result = await callBackend('join', { roomCode: code });
-    if (result.success) {
-      roomCode = code;
-      myRole = 'p2';
-      isMultiplayer = true;
-      opponentJoined = true;     // we are P2, so opponent is already here
-      lastSeenVersion = 0;
-      loadMultiplayerState(result.state);
-      saveCurrentRoom();
-      document.getElementById('multi-modal').style.display = 'none';
-      setStatus(`Joined room ${roomCode}`);
-      startPolling();
-      saveCurrentRoom();
-    } else {
-      alert(result.error || 'Failed to join room');
-    }
-  }
 
-  function loadMultiplayerState(fullState) {
-    // Map server state to local variables (p1 = YOU when myRole==='p1')
-    if (myRole === 'p1') {
-      playerHand = fullState.p1Hand || [];
-      playerPayoff = fullState.p1Payoff || [];
-      playerSides = fullState.p1Sides || [[],[],[],[]];
-      aiPayoff = fullState.p2Payoff || [];
-      aiSides = fullState.p2Sides || [[],[],[],[]];
-    } else {
-      playerHand = fullState.p2Hand || [];
-      playerPayoff = fullState.p2Payoff || [];
-      playerSides = fullState.p2Sides || [[],[],[],[]];
-      aiPayoff = fullState.p1Payoff || [];
-      aiSides = fullState.p1Sides || [[],[],[],[]];
-    }
-    centers = fullState.centers || [[],[],[],[]];
-    stock = fullState.stock || [];
-    currentPlayer = (myRole === fullState.currentPlayer) ? "player" : "ai";
-    updateUI();
-  }
+  
+
+
 
 function loadMultiplayerStateFromView(v) {
   playerHand   = v.myHand || [];
@@ -884,97 +798,6 @@ function discardToSide(sideIdx) {
   // ====================== MULTIPLAYER OVERRIDE: tryPlayToCenter ======================
   
   
-async function tryPlayToCenter(i) {
-  if (currentPlayer !== "player" || !selected) return;
-
-  var parts = selected.split('-');
-  var type = parts[0], idx = parseInt(parts[1]);
-  var card = type === "hand" ? playerHand[idx] : 
-             type === "payoff" ? topCard(playerPayoff) : topCard(playerSides[idx]);
-
-  if (!card || !canPlayOn(card, topCard(centers[i]))) {
-    setStatus("Illegal move", "#ff6666");
-    return;
-  }
-
-  // === PURE OPTIMISTIC LOCAL UPDATE ONLY ===
-  var intendedRank = getIntendedRank(card, topCard(centers[i]));
-  var cardCopy = { rank: intendedRank, suit: card.suit, color: card.color };
-
-  // Animation
-  var sourceEl = null;
-  if (type === "hand") sourceEl = document.querySelectorAll("#player-hand .card")[idx];
-  else if (type === "payoff") sourceEl = document.getElementById("player-payoff-pile").querySelector(".card");
-  else sourceEl = document.querySelectorAll("#player-sides .pile")[idx].querySelector(".card");
-
-  var targetPileEl = document.querySelectorAll("#centers .pile")[i];
-  if (sourceEl && targetPileEl) animateCardPlay(sourceEl, cardCopy, targetPileEl);
-
-  // Remove card from source
-  if (type === "hand") playerHand.splice(idx, 1);
-  else if (type === "payoff") playerPayoff.pop();
-  else playerSides[idx].pop();
-
-  // Add to center
-  centers[i].push(cardCopy);
-
-  // Clear center if Q or full
-  if (intendedRank === 'Q' || centers[i].length >= 13) {
-    stock = stock.concat(centers[i]);
-    shuffle(stock);
-    centers[i] = [];
-  }
-
-  // Auto-refill hand if empty
-  // Multiplayer: let the SERVER do the refill at endTurn (prevents duplication)
-  if (playerHand.length === 0) {
-    if (!isMultiplayer) {
-      while (playerHand.length < 5 && stock.length > 0) {
-        playerHand.push(stock.shift());
-      }
-    } else {
-      // In multiplayer we just leave the hand short for now.
-      // The server will top it up to 5 cards at the end of the turn.
-      // (still fully legal — player just can't play the new cards this exact turn)
-    }
-  }
-  // Streak
-  currentStreak++;
-  currentStreakFromPayoff = (type === "payoff");
-  const points = getStreakPoints(currentStreak, currentStreakFromPayoff);
-  handStreakBonus += points;
-  showStreak();
-
-  hasPlayedThisTurn = true;
-  selected = null;
-
-  updateUI();
-  setStatus(`Played ${cardDisplay(cardCopy)} (+${points})`);
-
-  if (playerPayoff.length === 0) {
-    if (isMultiplayer) {
-      // ← NEW: Send the FINAL move to server before ending hand
-      setStatus("Saving final move & ending hand...");
-      callBackend('endHand', {
-        roomCode: roomCode,
-        playerRole: myRole,
-        centers: JSON.stringify(centers),
-        mySides: JSON.stringify(playerSides),
-        myHand: JSON.stringify(playerHand),
-        myPayoff: JSON.stringify(playerPayoff),
-        stock: JSON.stringify(stock)
-      }).then(result => {
-        if (!result.success) {
-          console.error("endHand failed:", result.error);
-        }
-      });
-    }
-    endHand("player");   // this will show results screen + clear local room
-    return;
-  }
-
-  // NO server call here — we only save when the turn ends (on discard)
-}
 
   function animateCardPlay(sourceEl, card, targetPileEl) {
     if (!sourceEl || !targetPileEl) return;
@@ -1486,9 +1309,9 @@ function initMultiplayerModal() {
     newBtn.onclick = startGame;
     startGame();
   });
+// ====================== UPDATED MULTIPLAYER FUNCTIONS (replace the old ones) ======================
 
-
-//const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzqV0QOGuSQM-uadVJr73K5-I5tm7FDaituyoqEbTPMM0ISzIHtxhEjnE0CT1rJY6B3/exec';
+// Paste the following 6 functions exactly (they replace the old versions)
 
 async function callBackend(action, extraParams = {}) {
   const params = new URLSearchParams({ action, ...extraParams });
