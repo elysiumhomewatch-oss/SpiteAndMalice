@@ -644,25 +644,37 @@ async function startPolling() {
 
 async function pollOnce() {
   if (!isMultiplayer || !roomCode) return;
-  
-  const result = await callBackend('getState', { 
-    roomCode: roomCode, 
-    playerRole: myRole 
-  });
 
-  if (result.success && result.view) {
-    const v = result.view;
-    if (v.version > lastSeenVersion || lastSeenVersion === 0) {
-      lastSeenVersion = v.version || 1;
-      loadMultiplayerState(v);        // ← This now correctly converts strings
-      updateUI();
-      updateTurnStatus();
-      
-      if (v.gameOver) {
-        endHand(v.winner === myRole ? "player" : "ai");
+  let retries = 3;                                   // ← new: retry up to 3 times
+  while (retries > 0) {
+    const result = await callBackend('getState', {
+      roomCode: roomCode,
+      playerRole: myRole
+    });
+
+    if (result.success && result.view) {
+      const v = result.view;
+      if (v.version > lastSeenVersion || lastSeenVersion === 0) {
+        lastSeenVersion = v.version || 1;
+        loadMultiplayerState(v); // ← This now correctly converts strings
+        updateUI();
+        updateTurnStatus();
+       
+        if (v.gameOver) {
+          endHand(v.winner === myRole ? "player" : "ai");
+        }
+      }
+      return;   // success → stop retrying
+    } else {
+      retries--;
+      if (retries > 0) {
+        await new Promise(resolve => setTimeout(resolve, 600)); // wait before retry
       }
     }
   }
+
+  // only reach here after all retries failed
+  setStatus('fail, check internet connection');
 }
 function stopPolling() {
   if (pollInterval) clearInterval(pollInterval);
