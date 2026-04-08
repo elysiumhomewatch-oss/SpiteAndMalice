@@ -862,6 +862,7 @@ function animateCardPlay(sourceEl, card, targetPileEl) {
   if (!sourceEl || !targetPileEl) return;
   var rectSource = sourceEl.getBoundingClientRect();
   var rectTarget = targetPileEl.getBoundingClientRect();
+
   var flying = document.createElement("div");
   flying.className = "card " + card.color;
   flying.textContent = cardDisplay(card);
@@ -873,12 +874,14 @@ function animateCardPlay(sourceEl, card, targetPileEl) {
   flying.style.zIndex = "10000";
   flying.style.pointerEvents = "none";
   document.body.appendChild(flying);
+
   setTimeout(() => {
     flying.style.transition = "all 0.65s cubic-bezier(0.25, 0.1, 0.25, 1)";
     flying.style.left = (rectTarget.left + 8) + "px";
     flying.style.top = (rectTarget.top + 8) + "px";
     flying.style.transform = "scale(0.85) rotate(15deg)";
   }, 20);
+
   setTimeout(() => flying.remove(), 700);
 }
 
@@ -971,6 +974,7 @@ function aiTurn() {
   let played = false;
   let loopSafety = 0;
 
+  // Prioritize Payoff plays
   while (aiPayoff.length > 0 && loopSafety < 20) {
     loopSafety++;
     let tp = topCard(aiPayoff);
@@ -987,14 +991,17 @@ function aiTurn() {
     if (!playedThisLoop) break;
   }
 
-  // (Rest of your original AI logic - I kept it short here for space, but you can keep your full version)
+  // Aces to empty centers
   if (!played) {
     for (let h = 0; h < aiHand.length; h++) {
       let card = aiHand[h];
       if (card.rank === 'A') {
         for (let j = 0; j < 4; j++) {
           if (!topCard(centers[j])) {
-            if (aiPlayCard("hand", h, j)) { played = true; break; }
+            if (aiPlayCard("hand", h, j)) {
+              played = true;
+              break;
+            }
           }
         }
         if (played) break;
@@ -1002,7 +1009,21 @@ function aiTurn() {
     }
   }
 
-  // ... [You can keep the rest of your full aiTurn logic here] ...
+  // Basic play any legal card
+  if (!played && aiHand.length > 0) {
+    for (let h = 0; h < aiHand.length; h++) {
+      let card = aiHand[h];
+      for (let j = 0; j < 4; j++) {
+        if (aiCanPlay(card, j)) {
+          if (aiPlayCard("hand", h, j)) {
+            played = true;
+            break;
+          }
+        }
+      }
+      if (played) break;
+    }
+  }
 
   if (aiPayoff.length === 0) {
     endHand("ai");
@@ -1126,9 +1147,23 @@ function initMultiplayerModal() {
 function initHelpModal() {
   const helpModal = document.getElementById('help-modal');
   const helpBtn = document.getElementById('help-btn');
+  const closeHelp = document.getElementById('close-help');
+
   if (!helpModal || !helpBtn) return;
-  helpBtn.addEventListener('click', () => helpModal.style.display = 'block');
-  // Add close logic if needed
+
+  helpBtn.addEventListener('click', () => {
+    helpModal.style.display = 'block';
+  });
+
+  if (closeHelp) {
+    closeHelp.addEventListener('click', () => {
+      helpModal.style.display = 'none';
+    });
+  }
+
+  helpModal.addEventListener('click', (e) => {
+    if (e.target === helpModal) helpModal.style.display = 'none';
+  });
 }
 // ====================== WINDOW LOAD ======================
 window.addEventListener('load', () => {
