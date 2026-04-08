@@ -649,7 +649,12 @@ async function startPolling() {
 async function pollOnce() {
   if (!isMultiplayer || !roomCode) return;
 
-  let retries = 3;                                   // ← new: retry up to 3 times
+  // Only poll if it's NOT our turn (opponent is playing)
+  if (currentPlayer === "player") {
+    return;   // ← current player does NOT poll
+  }
+
+  let retries = 3;
   while (retries > 0) {
     const result = await callBackend('getState', {
       roomCode: roomCode,
@@ -660,7 +665,7 @@ async function pollOnce() {
       const v = result.view;
       if (v.version > lastSeenVersion || lastSeenVersion === 0) {
         lastSeenVersion = v.version || 1;
-        loadMultiplayerState(v); // ← This now correctly converts strings
+        loadMultiplayerState(v);
         updateUI();
         updateTurnStatus();
        
@@ -668,16 +673,16 @@ async function pollOnce() {
           endHand(v.winner === myRole ? "player" : "ai");
         }
       }
-      return;   // success → stop retrying
+      return;   // success
     } else {
       retries--;
       if (retries > 0) {
-        await new Promise(resolve => setTimeout(resolve, 600)); // wait before retry
+        await new Promise(resolve => setTimeout(resolve, 600));
       }
     }
   }
 
-  // only reach here after all retries failed
+  // only reach here after retries failed
   setStatus('fail, check internet connection');
 }
 function stopPolling() {
@@ -992,11 +997,18 @@ function endPlayerTurn() {
   currentStreak = 0;
 
   if (isMultiplayer) {
-    //currentPlayer = "ai";
-    turnEndTime = Date.now();
+    // Switch locally to opponent turn
+    currentPlayer = "ai";
     updateUI();
     updateTurnStatus();
-    setTimeout(() => { if (isMultiplayer) pollOnce(); }, 800);
+    
+    // Start polling ONLY after ~10 seconds (as you requested)
+    setTimeout(() => {
+      if (isMultiplayer && currentPlayer === "ai") {
+        pollOnce();
+      }
+    }, 10000);   // 10 seconds delay before checking opponent's move
+
     return;
   }
 
