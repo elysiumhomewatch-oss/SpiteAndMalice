@@ -530,7 +530,7 @@ async function createRoom() {
           <button onclick="startMultiplayerAfterCreate()" style="background:#00ff88;color:#222;padding:16px;border:none;border-radius:10px;font-size:1.2rem;font-weight:bold;width:100%;">✅ I'm Ready – Start Playing</button>
         `;
 
-        setTimeout(startPolling, 800);   // safe delay for sheet
+        setTimeout(startPolling, 3000);   // safe delay for sheet
         setStatus(`Room ${roomCode} created – waiting for opponent`);
         return;   // success → stop everything
       } else {
@@ -592,9 +592,13 @@ async function joinRoom(code) {
   }
 }
 
+// ====================== LOAD MULTIPLAYER STATE ======================
 function loadMultiplayerState(data) {
-  // ── NEW: handle both full state (create/join) AND view format (getState/polling) ──
+  if (!data) return;
+
+  // NEW: handle both full state (createRoom) AND view format (getState/polling)
   if (data.myHand !== undefined) {
+    // This is the "view" returned by getState()
     playerHand   = data.myHand || [];
     playerPayoff = data.myPayoff || [];
     playerSides  = data.mySides || [[],[],[],[]];
@@ -602,34 +606,24 @@ function loadMultiplayerState(data) {
     aiSides      = data.opponentSides || [[],[],[],[]];
     centers      = data.centers || [[],[],[],[]];
     currentPlayer = data.currentPlayer || currentPlayer;
-    lastSeenVersion = data.version || lastSeenVersion;
-    updateUI();
-    updateTurnStatus();
-    return;                    // ← view handled, exit early (existing full-state code stays untouched)
+  } 
+  else {
+    // This is the full state returned by createRoom() / joinRoom()
+    playerHand   = myRole === 'p1' ? (data.p1Hand || [])   : (data.p2Hand || []);
+    playerPayoff = myRole === 'p1' ? (data.p1Payoff || []) : (data.p2Payoff || []);
+    playerSides  = myRole === 'p1' ? (data.p1Sides || [[],[],[],[]]) : (data.p2Sides || [[],[],[],[]]);
+    aiPayoff     = myRole === 'p1' ? (data.p2Payoff || []) : (data.p1Payoff || []);
+    aiSides      = myRole === 'p1' ? (data.p2Sides || [[],[],[],[]]) : (data.p1Sides || [[],[],[],[]]);
+    centers      = data.centers || [[],[],[],[]];
+    currentPlayer = data.currentPlayer || currentPlayer;
   }
 
-  if (myRole === 'p1') {
-    playerHand   = toCards(fullState.p1Hand);
-    playerPayoff = toCards(fullState.p1Payoff);
-    playerSides  = fullState.p1Sides ? fullState.p1Sides.map(toCards) : [[],[],[],[]];
-    aiPayoff     = toCards(fullState.p2Payoff);
-    aiSides      = fullState.p2Sides ? fullState.p2Sides.map(toCards) : [[],[],[],[]];
-  } else {
-    // Player 2 (joining player)
-    playerHand   = toCards(fullState.p2Hand);
-    playerPayoff = toCards(fullState.p2Payoff);
-    playerSides  = fullState.p2Sides ? fullState.p2Sides.map(toCards) : [[],[],[],[]];
-    aiPayoff     = toCards(fullState.p1Payoff);
-    aiSides      = fullState.p1Sides ? fullState.p1Sides.map(toCards) : [[],[],[],[]];
-  }
-
-  centers = fullState.centers ? fullState.centers.map(toCards) : [[],[],[],[]];
-  stock   = toCards(fullState.stock);
-
-  currentPlayer = (myRole === fullState.currentPlayer) ? "player" : "ai";
+  lastSeenVersion = data.version || lastSeenVersion || 0;
+  isMultiplayer = true;
 
   updateUI();
-  document.getElementById('abandon-btn').style.display = 'inline-block';
+  updateTurnStatus();
+  updateScores();
 }
 
 function saveCurrentRoom() {
