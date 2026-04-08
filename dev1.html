@@ -649,10 +649,8 @@ async function startPolling() {
 async function pollOnce() {
   if (!isMultiplayer || !roomCode) return;
 
-  // Current player (the one whose turn it is) should NOT poll
-  if (currentPlayer === "player") {
-    return;
-  }
+  // Never poll when it's our turn
+  if (currentPlayer === "player") return;
 
   let retries = 3;
   while (retries > 0) {
@@ -663,37 +661,39 @@ async function pollOnce() {
 
     if (result.success && result.view) {
       const v = result.view;
+
       if (v.version > lastSeenVersion || lastSeenVersion === 0) {
         lastSeenVersion = v.version || 1;
         loadMultiplayerState(v);
         updateUI();
         updateTurnStatus();
-       
+
         if (v.gameOver) {
           endHand(v.winner === myRole ? "player" : "ai");
           return;
         }
 
-        // If it's now our turn again, stop polling
-        if (v.currentPlayer === myRole) {
+        // If it's now our turn, stop polling
+        if ((myRole === 'p1' && v.currentPlayer === 'p1') || 
+            (myRole === 'p2' && v.currentPlayer === 'p2')) {
           currentPlayer = "player";
+          updateUI();
           updateTurnStatus();
           return;
         }
       }
-      // Continue polling every 5 seconds while waiting for opponent
+
+      // Continue polling every 5 seconds while waiting
       setTimeout(pollOnce, 5000);
       return;
     } else {
       retries--;
-      if (retries > 0) {
-        await new Promise(resolve => setTimeout(resolve, 600));
-      }
+      if (retries > 0) await new Promise(r => setTimeout(r, 700));
     }
   }
 
-  // Only reach here after retries failed
-  setStatus('fail, check internet connection');
+  setStatus('Connection issue - retrying...', '#ffaa00');
+  setTimeout(pollOnce, 5000);
 }
 function stopPolling() {
   if (pollInterval) clearInterval(pollInterval);
@@ -865,17 +865,17 @@ async function discardToSide(sideIdx) {
   var handIdx = parseInt(selected.split('-')[1]);
   var card = playerHand[handIdx];
 
-  // 1. Update LOCAL state FIRST (this is what the user sees immediately)
+  // Update LOCAL state FIRST - user must see the change immediately
   playerSides[sideIdx].push(card);
   playerHand.splice(handIdx, 1);
 
   hasDiscardedThisTurn = true;
   selected = null;
 
-  // 2. Refresh the screen with the final local state BEFORE sending to server
+  // Show final local state BEFORE sending to server
   updateUI();
   updateTurnStatus();
-  setStatus("Saving turn to server...");
+  setStatus("Saving full turn...");
 
   if (isMultiplayer) {
     try {
@@ -890,19 +890,23 @@ async function discardToSide(sideIdx) {
       });
 
       if (result.success) {
-        setStatus("Turn completed ✓", "#00ff88");
-        // Do NOT call endPlayerTurn() here — let the polling handle the turn switch
+        setStatus("Turn saved ✓", "#00ff88");
+        // Switch to waiting mode locally
+        currentPlayer = "ai";
+        updateUI();
+        updateTurnStatus();
+        // Start polling after short delay
+        setTimeout(() => { if (isMultiplayer && currentPlayer === "ai") pollOnce(); }, 1200);
       } else {
-        setStatus(result.error || "Server error", "#ff6666");
-        hasDiscardedThisTurn = false; // allow retry
+        setStatus(result.error || "Server rejected turn", "#ff6666");
+        hasDiscardedThisTurn = false;
       }
-    } catch (err) {
-      console.error(err);
-      setStatus("Connection error", "#ff6666");
+    } catch (e) {
+      console.error(e);
+      setStatus("Connection failed", "#ff6666");
       hasDiscardedThisTurn = false;
     }
   } else {
-    // Single player only
     endPlayerTurn();
   }
 }
@@ -1010,22 +1014,19 @@ function endPlayerTurn() {
   currentStreak = 0;
 
   if (isMultiplayer) {
-    // Switch to opponent turn locally
     currentPlayer = "ai";
     updateUI();
     updateTurnStatus();
 
-    // Start polling ~1.5 seconds after your turn ends, then every 5 seconds
+    // Start polling for opponent's move
     setTimeout(() => {
-      if (isMultiplayer && currentPlayer === "ai") {
-        pollOnce();
-      }
+      if (isMultiplayer && currentPlayer === "ai") pollOnce();
     }, 1500);
 
     return;
   }
 
-  // Single-player AI turn (unchanged)
+  // Single player only
   while (playerHand.length < 5 && stock.length > 0) playerHand.push(stock.shift());
   updateUI();
   if (playerPayoff.length === 0) return;
