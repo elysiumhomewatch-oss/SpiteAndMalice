@@ -482,63 +482,83 @@ async function callBackend(action, extraParams = {}) {
 }
 
 async function createRoom() {
+  const modal = document.getElementById('multi-modal');
   const modalTitle = document.getElementById('modal-title');
   const content = document.getElementById('lobby-content');
-  
+
+  // Disable other buttons while creating
+  document.getElementById('multi-create-btn').disabled = true;
+  document.getElementById('multi-join-btn').disabled = true;
+
+  modal.style.display = 'flex';
   modalTitle.textContent = 'Creating Room...';
-  content.innerHTML = `<div style="text-align:center;padding:40px 20px;">
-    <p style="font-size:1.3rem;">Please wait...</p>
-    <div style="width:50px;height:50px;border:6px solid #f0c14e;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto;"></div>
-  </div>`;
+  content.innerHTML = `
+    <div style="text-align:center; padding:50px 20px;">
+      <p style="font-size:1.3rem; margin-bottom:20px;">Please wait...</p>
+      <div style="width:60px; height:60px; border:8px solid #f0c14e; border-top-color:transparent; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto;"></div>
+    </div>
+  `;
 
-  const result = await callBackend('create');
+  try {
+    const result = await callBackend('create');
 
-  if (result.success) {
-    roomCode = result.roomCode;
-    myRole = 'p1';
-    isMultiplayer = true;
-    lastSeenVersion = 0;
-    loadMultiplayerState(result.state);
-    saveCurrentRoom();
+    if (result.success) {
+      roomCode = result.roomCode;
+      myRole = 'p1';
+      isMultiplayer = true;
+      lastSeenVersion = 0;
 
-    const fullLink = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
+      loadMultiplayerState(result.state);
+      saveCurrentRoom();
 
-    modalTitle.textContent = '🎉 Room Created!';
-    content.innerHTML = `
-      <h3 style="color:#00ff88;">Share this link with your friend:</h3>
-      <div style="background:#05261f; padding:16px; border-radius:12px; font-size:1.35rem; font-weight:bold; word-break:break-all; margin:15px 0; border:3px solid #f0c14e;" id="room-link-display">
-        ${fullLink}
-      </div>
-      
-      <button onclick="copyRoomLink()" style="background:#f0c14e; color:#222; padding:14px 28px; border:none; border-radius:10px; font-size:1.2rem; font-weight:bold; margin:10px 0; width:100%;">
-        📋 Copy Link
-      </button>
-      
-      <p style="font-size:1rem; margin-top:15px; opacity:0.9;">
-        Your friend can open this link directly.<br>
-        They don't need the app installed — it will open in browser.
-      </p>
-      
-      <button onclick="startMultiplayerAfterCreate()" style="margin-top:20px; background:#00ff88; color:#222; padding:14px 30px; border:none; border-radius:10px; font-size:1.1rem; font-weight:bold; width:100%;">
-        ✅ I'm Ready – Start Playing
-      </button>
-    `;
+      const fullLink = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
 
-    startPolling();
-    setStatus(`Room ${roomCode} created – waiting for opponent`);
-  } else {
-    content.innerHTML = `<p style="color:#ff6666;">${result.error || 'Failed to create room'}</p>`;
+      modalTitle.textContent = '🎉 Room Created Successfully!';
+      content.innerHTML = `
+        <h3 style="color:#00ff88; margin-bottom:10px;">Share this link with your friend:</h3>
+        <div style="background:#05261f; padding:18px; border-radius:12px; font-size:1.4rem; font-weight:bold; word-break:break-all; margin:20px 0; border:4px solid #f0c14e; text-align:center;" id="room-link-display">
+          ${fullLink}
+        </div>
+        
+        <button onclick="copyRoomLink()" style="background:#f0c14e; color:#222; padding:16px; border:none; border-radius:10px; font-size:1.25rem; font-weight:bold; width:100%; margin:10px 0;">
+          📋 Copy Link
+        </button>
+        
+        <p style="margin:15px 0; opacity:0.9;">Your friend just needs to tap/open this link.</p>
+        
+        <button onclick="startMultiplayerAfterCreate()" style="background:#00ff88; color:#222; padding:16px; border:none; border-radius:10px; font-size:1.2rem; font-weight:bold; width:100%;">
+          ✅ I'm Ready – Start Playing
+        </button>
+      `;
+
+      startPolling();
+      setStatus(`Room ${roomCode} created – waiting for opponent`);
+    } else {
+      modalTitle.textContent = 'Error';
+      content.innerHTML = `<p style="color:#ff6666; font-size:1.2rem;">${result.error || 'Failed to create room'}</p>`;
+    }
+  } catch (err) {
+    modalTitle.textContent = 'Error';
+    content.innerHTML = `<p style="color:#ff6666;">Connection error. Please try again.</p>`;
+  } finally {
+    // Re-enable buttons
+    document.getElementById('multi-create-btn').disabled = false;
+    document.getElementById('multi-join-btn').disabled = false;
   }
 }
 
 function copyRoomLink() {
-  const link = document.getElementById('room-link-display').textContent.trim();
-  navigator.clipboard.writeText(link).then(() => {
-    const btn = document.querySelector('#lobby-content button');
-    if (btn) {
-      const original = btn.textContent;
-      btn.textContent = '✅ Copied!';
-      setTimeout(() => btn.textContent = original, 2000);
+  const linkEl = document.getElementById('room-link-display');
+  if (!linkEl) return;
+  
+  navigator.clipboard.writeText(linkEl.textContent.trim()).then(() => {
+    const btns = document.querySelectorAll('#lobby-content button');
+    for (let btn of btns) {
+      if (btn.textContent.includes('Copy')) {
+        const originalText = btn.textContent;
+        btn.textContent = '✅ Copied!';
+        setTimeout(() => { btn.textContent = originalText; }, 2500);
+      }
     }
   });
 }
