@@ -1119,6 +1119,7 @@ function showResultsScreen(isWinner, base, remaining, streakBonus, total) {
   const screen = document.getElementById('results-screen');
   const title = document.getElementById('result-title');
   const details = document.getElementById('result-details');
+  const continueBtn = document.getElementById('continue-btn');
 
   if (isWinner) {
     title.textContent = "🎉 YOU WIN THE HAND!";
@@ -1135,9 +1136,18 @@ function showResultsScreen(isWinner, base, remaining, streakBonus, total) {
     <hr style="border-color:#555">
     <p style="font-size:1.4rem"><strong>Total This Hand: ${total} points</strong></p>
     <p style="margin-top:15px">Your Total: ${playerTotalScore}  AI Total: ${aiTotalScore}</p>
+    ${!isWinner ? '<p style="color:#ffaa00; margin-top:10px;">Better luck next hand!</p>' : ''}
   `;
 
   screen.style.display = 'flex';
+
+  // Re-attach click handler every time (safest way)
+  if (continueBtn) {
+    continueBtn.onclick = () => {
+      screen.style.display = 'none';
+      startGame();           // This restarts a fresh game
+    };
+  }
 }
 
 // ====================== ABANDON & DEEP LINK ======================
