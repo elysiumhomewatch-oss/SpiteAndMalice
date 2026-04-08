@@ -510,7 +510,9 @@ async function createRoom() {
       isMultiplayer = true;
       lastSeenVersion = 0;
 
+      // (this is the exact text just AFTER the update)
       loadMultiplayerState(result.state);
+      lastSeenVersion = result.state.version || 0;   // ← tiny safety so first poll doesn't think it's old
       saveCurrentRoom();
 
       const fullLink = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
@@ -580,12 +582,21 @@ async function joinRoom(code) {
   }
 }
 
-function loadMultiplayerState(fullState) {
-  // Convert all string arrays to real card objects
-  const toCards = (arr) => {
-    if (!arr || !Array.isArray(arr)) return [];
-    return arr.map(stringToCard).filter(c => c !== null);
-  };
+function loadMultiplayerState(data) {
+  // ── NEW: handle both full state (create/join) AND view format (getState/polling) ──
+  if (data.myHand !== undefined) {
+    playerHand   = data.myHand || [];
+    playerPayoff = data.myPayoff || [];
+    playerSides  = data.mySides || [[],[],[],[]];
+    aiPayoff     = data.opponentPayoff || [];
+    aiSides      = data.opponentSides || [[],[],[],[]];
+    centers      = data.centers || [[],[],[],[]];
+    currentPlayer = data.currentPlayer || currentPlayer;
+    lastSeenVersion = data.version || lastSeenVersion;
+    updateUI();
+    updateTurnStatus();
+    return;                    // ← view handled, exit early (existing full-state code stays untouched)
+  }
 
   if (myRole === 'p1') {
     playerHand   = toCards(fullState.p1Hand);
