@@ -527,7 +527,7 @@ async function createRoom() {
         <button onclick="startMultiplayerAfterCreate()" style="background:#00ff88;color:#222;padding:16px;border:none;border-radius:10px;font-size:1.2rem;font-weight:bold;width:100%;">✅ I'm Ready – Start Playing</button>
       `;
 
-      startPolling();
+      setTimeout(startPolling, 800);   // ← CHANGED: tiny delay so the new ROOM- sheet is fully visible to the next getState call
       setStatus(`Room ${roomCode} created – waiting for opponent`);
     } else {
       modalTitle.textContent = 'Error';
