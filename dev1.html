@@ -865,13 +865,16 @@ async function discardToSide(sideIdx) {
   var handIdx = parseInt(selected.split('-')[1]);
   var card = playerHand[handIdx];
 
+  // 1. Update LOCAL state FIRST (this is what the user sees immediately)
   playerSides[sideIdx].push(card);
   playerHand.splice(handIdx, 1);
 
   hasDiscardedThisTurn = true;
   selected = null;
 
+  // 2. Refresh the screen with the final local state BEFORE sending to server
   updateUI();
+  updateTurnStatus();
   setStatus("Saving turn to server...");
 
   if (isMultiplayer) {
@@ -887,8 +890,8 @@ async function discardToSide(sideIdx) {
       });
 
       if (result.success) {
-        setStatus("Turn completed", "#00ff88");
-        // Do NOT change currentPlayer here - let the next poll do it
+        setStatus("Turn completed ✓", "#00ff88");
+        // Do NOT call endPlayerTurn() here — let the polling handle the turn switch
       } else {
         setStatus(result.error || "Server error", "#ff6666");
         hasDiscardedThisTurn = false; // allow retry
@@ -899,7 +902,7 @@ async function discardToSide(sideIdx) {
       hasDiscardedThisTurn = false;
     }
   } else {
-    // single player - keep original behavior
+    // Single player only
     endPlayerTurn();
   }
 }
@@ -1007,22 +1010,22 @@ function endPlayerTurn() {
   currentStreak = 0;
 
   if (isMultiplayer) {
-    // Switch locally to opponent turn
+    // Switch to opponent turn locally
     currentPlayer = "ai";
     updateUI();
     updateTurnStatus();
-    
-    // Start polling for opponent's move after a short delay, then every 5 seconds
+
+    // Start polling ~1.5 seconds after your turn ends, then every 5 seconds
     setTimeout(() => {
       if (isMultiplayer && currentPlayer === "ai") {
         pollOnce();
       }
-    }, 1500);   // short initial delay after your turn ends
+    }, 1500);
 
     return;
   }
 
-  // Single-player code (unchanged)
+  // Single-player AI turn (unchanged)
   while (playerHand.length < 5 && stock.length > 0) playerHand.push(stock.shift());
   updateUI();
   if (playerPayoff.length === 0) return;
