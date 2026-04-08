@@ -581,8 +581,11 @@ async function joinRoom(code) {
 }
 
 function loadMultiplayerState(fullState) {
-  // Convert string arrays to real card objects
-  const toCards = arr => (arr || []).map(stringToCard).filter(c => c !== null);
+  // Convert all string arrays to real card objects
+  const toCards = (arr) => {
+    if (!arr || !Array.isArray(arr)) return [];
+    return arr.map(stringToCard).filter(c => c !== null);
+  };
 
   if (myRole === 'p1') {
     playerHand   = toCards(fullState.p1Hand);
@@ -591,6 +594,7 @@ function loadMultiplayerState(fullState) {
     aiPayoff     = toCards(fullState.p2Payoff);
     aiSides      = fullState.p2Sides ? fullState.p2Sides.map(toCards) : [[],[],[],[]];
   } else {
+    // Player 2 (joining player)
     playerHand   = toCards(fullState.p2Hand);
     playerPayoff = toCards(fullState.p2Payoff);
     playerSides  = fullState.p2Sides ? fullState.p2Sides.map(toCards) : [[],[],[],[]];
@@ -629,17 +633,26 @@ async function startPolling() {
 
 async function pollOnce() {
   if (!isMultiplayer || !roomCode) return;
-  const result = await callBackend('getState', { roomCode: roomCode, playerRole: myRole });
+  
+  const result = await callBackend('getState', { 
+    roomCode: roomCode, 
+    playerRole: myRole 
+  });
+
   if (result.success && result.view) {
     const v = result.view;
-    if (v.version > lastSeenVersion) {
-      lastSeenVersion = v.version;
-      loadMultiplayerState(v);   // ← This now correctly converts strings
-      if (v.gameOver) endHand(v.winner === myRole ? "player" : "ai");
+    if (v.version > lastSeenVersion || lastSeenVersion === 0) {
+      lastSeenVersion = v.version || 1;
+      loadMultiplayerState(v);        // ← This now correctly converts strings
+      updateUI();
+      updateTurnStatus();
+      
+      if (v.gameOver) {
+        endHand(v.winner === myRole ? "player" : "ai");
+      }
     }
   }
 }
-
 function stopPolling() {
   if (pollInterval) clearInterval(pollInterval);
 }
