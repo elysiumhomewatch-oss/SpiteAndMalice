@@ -482,68 +482,33 @@ async function callBackend(action, extraParams = {}) {
 }
 
 async function createRoom() {
-  const modal = document.getElementById('multi-modal');
   const modalTitle = document.getElementById('modal-title');
   const content = document.getElementById('lobby-content');
-
-  // Disable other buttons while creating
-  document.getElementById('multi-create-btn').disabled = true;
-  document.getElementById('multi-join-btn').disabled = true;
-
-  modal.style.display = 'flex';
   modalTitle.textContent = 'Creating Room...';
-  content.innerHTML = `
-    <div style="text-align:center; padding:50px 20px;">
-      <p style="font-size:1.3rem; margin-bottom:20px;">Please wait...</p>
-      <div style="width:60px; height:60px; border:8px solid #f0c14e; border-top-color:transparent; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto;"></div>
-    </div>
-  `;
+  content.innerHTML = `<div style="text-align:center;padding:40px 20px;"><p style="font-size:1.3rem;">Please wait...</p><div style="width:50px;height:50px;border:6px solid #f0c14e;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto;"></div></div>`;
 
-  try {
-    const result = await callBackend('create');
+  const result = await callBackend('create');
+  if (result.success) {
+    roomCode = result.roomCode;
+    myRole = 'p1';
+    isMultiplayer = true;
+    lastSeenVersion = 0;
+    loadMultiplayerState(result.state);
+    saveCurrentRoom();
 
-    if (result.success) {
-      roomCode = result.roomCode;
-      myRole = 'p1';
-      isMultiplayer = true;
-      lastSeenVersion = 0;
+    const fullLink = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
 
-      loadMultiplayerState(result.state);
-      saveCurrentRoom();
-
-      const fullLink = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
-
-      modalTitle.textContent = '🎉 Room Created Successfully!';
-      content.innerHTML = `
-        <h3 style="color:#00ff88; margin-bottom:10px;">Share this link with your friend:</h3>
-        <div style="background:#05261f; padding:18px; border-radius:12px; font-size:1.4rem; font-weight:bold; word-break:break-all; margin:20px 0; border:4px solid #f0c14e; text-align:center;" id="room-link-display">
-          ${fullLink}
-        </div>
-        
-        <button onclick="copyRoomLink()" style="background:#f0c14e; color:#222; padding:16px; border:none; border-radius:10px; font-size:1.25rem; font-weight:bold; width:100%; margin:10px 0;">
-          📋 Copy Link
-        </button>
-        
-        <p style="margin:15px 0; opacity:0.9;">Your friend just needs to tap/open this link.</p>
-        
-        <button onclick="startMultiplayerAfterCreate()" style="background:#00ff88; color:#222; padding:16px; border:none; border-radius:10px; font-size:1.2rem; font-weight:bold; width:100%;">
-          ✅ I'm Ready – Start Playing
-        </button>
-      `;
-
-      startPolling();
-      setStatus(`Room ${roomCode} created – waiting for opponent`);
-    } else {
-      modalTitle.textContent = 'Error';
-      content.innerHTML = `<p style="color:#ff6666; font-size:1.2rem;">${result.error || 'Failed to create room'}</p>`;
-    }
-  } catch (err) {
-    modalTitle.textContent = 'Error';
-    content.innerHTML = `<p style="color:#ff6666;">Connection error. Please try again.</p>`;
-  } finally {
-    // Re-enable buttons
-    document.getElementById('multi-create-btn').disabled = false;
-    document.getElementById('multi-join-btn').disabled = false;
+    modalTitle.textContent = '🎉 Room Created!';
+    content.innerHTML = `
+      <p style="margin:10px 0 5px;font-size:1.1rem;">Share this link with your friend:</p>
+      <div style="background:#05261f;padding:15px;border-radius:12px;font-size:1.4rem;font-weight:bold;margin:15px 0;border:3px solid #f0c14e;" id="room-link-display">${fullLink}</div>
+      <button onclick="copyRoomLink()" style="background:#f0c14e;color:#222;padding:12px 24px;border:none;border-radius:10px;font-size:1.2rem;font-weight:bold;margin:10px 0;width:100%;">📋 Copy Link</button>
+      <button onclick="startMultiplayerAfterCreate()" style="margin-top:20px;background:#00ff88;color:#222;padding:12px 30px;border:none;border-radius:10px;font-size:1.1rem;font-weight:bold;width:100%;">I'm Ready – Start Playing</button>
+    `;
+    startPolling();
+    setStatus(`Room ${roomCode} created`);
+  } else {
+    content.innerHTML = `<p style="color:#ff6666;">${result.error || 'Failed to create room'}</p>`;
   }
 }
 
@@ -587,22 +552,28 @@ async function joinRoom(code) {
 }
 
 function loadMultiplayerState(fullState) {
+  // Convert string arrays to real card objects
+  const toCards = arr => (arr || []).map(stringToCard).filter(c => c !== null);
+
   if (myRole === 'p1') {
-    playerHand = fullState.p1Hand || [];
-    playerPayoff = fullState.p1Payoff || [];
-    playerSides = fullState.p1Sides || [[],[],[],[]];
-    aiPayoff = fullState.p2Payoff || [];
-    aiSides = fullState.p2Sides || [[],[],[],[]];
+    playerHand   = toCards(fullState.p1Hand);
+    playerPayoff = toCards(fullState.p1Payoff);
+    playerSides  = fullState.p1Sides ? fullState.p1Sides.map(toCards) : [[],[],[],[]];
+    aiPayoff     = toCards(fullState.p2Payoff);
+    aiSides      = fullState.p2Sides ? fullState.p2Sides.map(toCards) : [[],[],[],[]];
   } else {
-    playerHand = fullState.p2Hand || [];
-    playerPayoff = fullState.p2Payoff || [];
-    playerSides = fullState.p2Sides || [[],[],[],[]];
-    aiPayoff = fullState.p1Payoff || [];
-    aiSides = fullState.p1Sides || [[],[],[],[]];
+    playerHand   = toCards(fullState.p2Hand);
+    playerPayoff = toCards(fullState.p2Payoff);
+    playerSides  = fullState.p2Sides ? fullState.p2Sides.map(toCards) : [[],[],[],[]];
+    aiPayoff     = toCards(fullState.p1Payoff);
+    aiSides      = fullState.p1Sides ? fullState.p1Sides.map(toCards) : [[],[],[],[]];
   }
-  centers = fullState.centers || [[],[],[],[]];
-  stock = fullState.stock || [];
+
+  centers = fullState.centers ? fullState.centers.map(toCards) : [[],[],[],[]];
+  stock   = toCards(fullState.stock);
+
   currentPlayer = (myRole === fullState.currentPlayer) ? "player" : "ai";
+
   updateUI();
   document.getElementById('abandon-btn').style.display = 'inline-block';
 }
@@ -634,7 +605,7 @@ async function pollOnce() {
     const v = result.view;
     if (v.version > lastSeenVersion) {
       lastSeenVersion = v.version;
-      loadMultiplayerState(v);
+      loadMultiplayerState(v);   // ← This now correctly converts strings
       if (v.gameOver) endHand(v.winner === myRole ? "player" : "ai");
     }
   }
